@@ -60,13 +60,13 @@ for iFolds = 1:folds
 
     % Ridge regression
     if iFolds == 1
-        [cRidge, cBeta{iFolds}] = ridgeMML(cR(trainIdx, :), Y(:, trainIdx)', true);
+        [cRidge, cBeta{iFolds}] = ridgeMML(cR(trainIdx, :), Y(trainIdx,:), true);
     else
-        [~, cBeta{iFolds}] = ridgeMML(cR(trainIdx, :), Y(:, trainIdx)', true, cRidge);
+        [~, cBeta{iFolds}] = ridgeMML(cR(trainIdx, :), Y(trainIdx, :), true, cRidge);
     end
 
     % Predict test set
-    neuralPred(:, testIdx) = (cR(testIdx, :) * cBeta{iFolds}(2:end))' + cBeta{iFolds}(1); % Remove the intercept from beta before prediction
+    neuralPred(testIdx, :) = (cR(testIdx, :) * cBeta{iFolds}(2:end))' + cBeta{iFolds}(1); % Remove the intercept from beta before prediction
 
     % Optional progress message
     if rem(iFolds, max(1, floor(folds/5))) == 0
