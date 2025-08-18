@@ -33,6 +33,21 @@ These scripts compile your data into an obj struct containing:
 
 *Note*: We have provide examples to give the user an overview how to use the toolbox. Users should modify these scripts to fit their dataset formats, and define/compute any variables they would like to include in the analysis for their own experiment.
 
+### Example overview of possible variables and their categories
+Here is an example guideline table for what variable should be put as which type in our linear encode model:
+
+| Variable name          | Description                          | Variable type | Category  |
+|------------------------|--------------------------------------|---------------|----------|
+| Motion energy          | Motion PCs in SVDs                    | Analog        | Continuous |
+| Key Points             | Key Point motion PCs in SVDs          | Analog        | Continuous |
+| Pupil                  | Pupil diameter, extracted from face camera | Analog        | Continuous |
+| Choice                 | Current trial choice onset            | Event kernel  | Task      |
+| Choice alignment       | Current trial choice completion onset | Event kernel  | Task      |
+| Stimulus               | Stimulus contrast                     | Event kernel  | Task      |
+| Reward                 | Reward onset                          | Event kernel  | Task      |
+| Choice History         | Choice from the previous trial       | Trial log     | Trial     |
+| Average motion energy  | Averaged Motion PCs for the trial    | Trial log     | Trial     |
+
 Run main analysis
 In the `examples/` folder and run:
 ```
