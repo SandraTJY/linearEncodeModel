@@ -4,8 +4,9 @@ A MATLAB toolbox for linear encoding of video, neural, and behavioural data. Thi
 
 ## Folder Structure
 - **data/** – Contains behavioural, neural, and video data files. Users should supply their datasets in the correct format.  
-- **examples/** – Demo scripts to show how to preprocess and structure data.  
+- **examples/** – Demo scripts and data to show how to preprocess and structure data.  
 - **main/** – Main configuration scripts. Run these after preparing your data objects.  
+- **test/** – Unit test class and loop scripts for checking the robustness of the toolbox.  
 - **utils/** – Helper functions and main functions required by the pipeline.  
 - **vidDeconv_options.m** – Defines paths, variable names, types, and parameters needed for your linear encode model.  
 
@@ -23,19 +24,17 @@ Prepare your data
 In the `examples/` folder, run:
 
 ```
-vidDeconv_extractFacemapData;    % Organise video/facial features
 vidDeconv_loadBhvNeuralData;   % Load and Organise neural and behavioral data
 ```
 These scripts compile your data into an obj struct containing:
 
 *obj.neural* – neural data table
 *obj.bhv – behavioral data table
-obj.vid – video data table
 
-*Note*: Users should modify these scripts to fit their dataset formats, and define/ compute any variables they would like to include in the analysis.
+*Note*: We have provide examples to give the user an overview how to use the toolbox. Users should modify these scripts to fit their dataset formats, and define/compute any variables they would like to include in the analysis for their own experiment.
 
 Run main analysis
-Go to the `main/` folder and run:
+In the `examples/` folder and run:
 ```
 loop_run_vidDeconv;
 ```
@@ -43,6 +42,7 @@ This script iterates over all animals and sessions:
 
 - Loads your options struct from vidDeconv_options.m.
 - Extracts the list of animals and sessions from your obj.bhv data.
+- Extracts video data from the prepared data (`vidData`) (we have provided our loading script in `examples/vidDataLoadingTemplate`, but since it is directly link to the our server and it is not accessible in GitHub, we provide the output (metadata) for this example.)
 - Loops through each animal-session pair and runs the pipeline via run_vidDeconv_config.
 
 *Note*: Ensure that obj contains all necessary data (event, neural, and optional video data) before running the loop.
@@ -53,7 +53,6 @@ This script iterates over all animals and sessions:
 options = vidDeconv_options; % Make sure you change the configuration beforehand
 
 % Prepare demo data
-vidDeconv_extractFacemapData;
 vidDeconv_loadBhvNeuralData;
 
 % Run main pipeline

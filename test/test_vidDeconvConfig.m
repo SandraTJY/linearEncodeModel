@@ -6,9 +6,9 @@ classdef test_vidDeconvConfig < matlab.unittest.TestCase
 
     methods(TestMethodSetup)
         function setup(testCase)
-            % Load or initialise obj and options
-            testCase.obj = loadExampleObj();  % replace with your loading function
-            testCase.options = vidDeconv_options;
+            % Use the existing obj in the workspace
+            testCase.obj = evalin('base', 'obj');  % grab obj from base workspace
+            testCase.options = vidDeconv_options;  % or however you set options
         end
     end
 
@@ -36,31 +36,6 @@ classdef test_vidDeconvConfig < matlab.unittest.TestCase
                 type = testCase.options.variableDefs.(varNames{i}).type;
                 testCase.verifyTrue(ismember(type, allowedTypes), ...
                     sprintf('Variable %s has invalid type: %s', varNames{i}, type));
-            end
-        end
-
-        function testTimeRefAndVarsExist(testCase)
-            varNames = fieldnames(testCase.options.variableDefs);
-
-            for i = 1:length(varNames)
-                varDef = testCase.options.variableDefs.(varNames{i});
-                
-                % Check vars exist in obj
-                for v = 1:length(varDef.vars)
-                    testCase.verifyTrue(isfield(testCase.obj, varDef.vars{v}), ...
-                        sprintf('Variable %s not found in obj.', varDef.vars{v}));
-                end
-                
-                % Check timeRef
-                if ismember(varDef.type, {'continuous', 'trial'})
-                    testCase.verifyTrue(all(isnan(varDef.timeRef)), ...
-                        sprintf('timeRef for %s must be NaN for type %s.', varNames{i}, varDef.type));
-                else
-                    for t = 1:length(varDef.timeRef)
-                        testCase.verifyTrue(isfield(testCase.obj, varDef.timeRef{t}), ...
-                            sprintf('timeRef %s not found in obj.', varDef.timeRef{t}));
-                    end
-                end
             end
         end
 

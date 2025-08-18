@@ -40,15 +40,15 @@ options.plotDesignMatrix = false;
 
 %%%--- Animal IDs -------------------------------------------------%%%
 % Archived options
-% options.subjectIDs = ['AMR035', 'MFE008', 'MFE015', 'MFE018', 'MFE029', 'MFE030', 'MFE033', 'MFE035', 'MFE036']; 
-% options.dataReview.subjectIDs = ['AMR035', 'MFE008', 'MFE015', 'MFE018', 'MFE029', 'MFE030', 'MFE033', 'MFE035', 'MFE036'];
+% options.subjectIDs = {'AMR035', 'MFE008', 'MFE015', 'MFE018', 'MFE029', 'MFE030', 'MFE033', 'MFE035', 'MFE036'}; 
+% options.dataReview.subjectIDs = {'AMR035', 'MFE008', 'MFE015', 'MFE018', 'MFE029', 'MFE030', 'MFE033', 'MFE035', 'MFE036'};
 
-options.animal = ['MFE008']; 
+options.animal = {'MFE008'}; 
 
 %-- beta kernel config --------------------------------------------------%
 options.sRate = 20;  % Hz
 options.preTime = 0.5; % time before the onset of an event that is included in the time kernel
-options.postTime = 2; % (I put it as 3 for now) time after the onset of an event that is included in the time kernel
+options.postTime = 2; % time after the onset of an event that is included in the time kernel
 
 %-- Linear Encoding Model Variable Definitions --------------------------------------------------%
 options.variableDefs = struct( ...

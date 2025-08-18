@@ -14,26 +14,26 @@ sessionList = {'2022-09-13_1'}; % note: no mouse name in this string
 sessionInfo = readtable('./data/instrumentalSessionInfo.csv','FileType','text','Delimiter',',','ReadVariableNames',true,'TreatAsEmpty','');
 vidData = struct(); % initialise containers
 
-for session = 1:height(sessionInfo)
-  
-    disp(['Processing video ' num2str(session) ' of ' num2str(height(sessionInfo))]);
-    
-    if sessionInfo.video(session) == 1
-        
-        % Extract current session info
-        expRef = sessionInfo.expRef{session};         % e.g., '2022-09-13_1_MFE008'
-        mouse  = sessionInfo.animal_name{session};    % e.g., 'MFE008'
-    
+if sessionInfo.video(session) == 1
+
+    % Extract current session info
+    expRef = sessionInfo.expRef{session};
+    mouse  = sessionInfo.animal_name{session};
+
+    % Skip invalid mouse names
+    if isempty(mouse) || ~ischar(mouse)
+        warning('Skipping session %s: no valid mouse name found.', expRef);
+    else
         % Remove _mouseName from expRef for matching
-        expRefShort = erase(expRef, ['_' mouse]);     % '2022-09-13_1'
-    
+        expRefShort = erase(expRef, ['_' mouse]);
+
         if ismember(mouse, mouseList) && ismember(expRefShort, sessionList)
-        
+            % --- Main processing code ---
             disp(['Processing ', mouse, ' - ', expRefShort, ' (' num2str(session) ' of ' num2str(height(sessionInfo)) ')']);
-            
-            sessionField = sprintf('session_%s', expRef);
-            sessionField = matlab.lang.makeValidName(sessionField); % Clean field name
-            
+
+            % Define session field
+            sessionField = matlab.lang.makeValidName(['session_' expRef]);
+
             if ~isfield(vidData, mouse)
                 vidData.(mouse) = struct();
             end
@@ -42,30 +42,30 @@ for session = 1:height(sessionInfo)
             end
 
             % load h5 file
-            filename = [options.vidDataRoot, mouse, '/', ...
+            filename = [options.vidDataRoot, '/' , mouse, '/', ...
                 expRef(1:10),'/',expRef(12),'/',expRef,'_face_FacemapPose.h5'];
-            
+
             % read mouth keypoints from h5 file
             mouth_x = h5read(filename,'/Facemap/mouth/x');
             mouth_y = h5read(filename,'/Facemap/mouth/y');
-            
+
             lowerlip_x = h5read(filename,'/Facemap/lowerlip/x');
             lowerlip_y = h5read(filename,'/Facemap/lowerlip/y');
-            
+
             % load motion PCs
-            load([options.vidDataRoot, sessionInfo.animal_name{session}, '/', ...
+            load([options.vidDataRoot, '/', sessionInfo.animal_name{session}, '/', ...
                 expRef(1:10),'/',expRef(12),'/',expRef,'_face_proc.mat']);
-            
+
             % retain the first 10 PCs
             MovementPC = movSVD_0(:,1:10);
             MotionPC = motSVD_0(:,1:10);
-            
+
             % get event times
             frameCounts = [size(MotionPC, 1), size(MovementPC, 1), ...
-                           size(mouth_x, 1), size(mouth_y, 1), ...
-                           size(lowerlip_x, 1), size(lowerlip_y, 1)];
+                size(mouth_x, 1), size(mouth_y, 1), ...
+                size(lowerlip_x, 1), size(lowerlip_y, 1)];
             nFrames = max(frameCounts); % Define here so it's always available
-            
+
             % --- Get event times ---
             try
                 event_times = getEventTimes(expRef, 'face_camera_strobe');
@@ -73,11 +73,11 @@ for session = 1:height(sessionInfo)
                 warning('Could not retrieve event times for %s: %s', expRef, MEinner.message);
                 event_times = NaN(nFrames, 1);
             end
-            
+
             % --- Adjust event_times length ---
             nEvents = numel(event_times);
             tolerance = 5;
-            
+
             % Warnings for mismatch
             if abs(nEvents - size(MotionPC,1)) > tolerance
                 warning('Session %s: %d events does not match %d motion PC frames.', expRef, nEvents, size(MotionPC,1));
@@ -85,7 +85,7 @@ for session = 1:height(sessionInfo)
             if abs(nEvents - size(MovementPC,1)) > tolerance
                 warning('Session %s: %d events does not match %d movement PC frames.', expRef, nEvents, size(MovementPC,1));
             end
-            
+
             % --- Align event_times with motion/movement PCs ---
             maxFrames = max(size(MotionPC, 1), size(MovementPC, 1));
             if nEvents > maxFrames
@@ -93,11 +93,11 @@ for session = 1:height(sessionInfo)
             elseif nEvents < maxFrames
                 event_times(end+1:maxFrames) = NaN;
             end
-            
+
             % --- Align event_times with mouth/lowerlip data ---
             arrays = {mouth_x, mouth_y, lowerlip_x, lowerlip_y};
             mouthFrames = max(cellfun(@(x) size(x,1), arrays));
-            
+
             if length(event_times) > mouthFrames
                 event_times = event_times(1:mouthFrames);
             elseif length(event_times) < mouthFrames
@@ -107,11 +107,11 @@ for session = 1:height(sessionInfo)
                 lowerlip_x  = lowerlip_x(1:newLen, :);
                 lowerlip_y  = lowerlip_y(1:newLen, :);
             end
-            
+
             % --- Build session table ---
             animal = repmat(categorical({mouse}), length(mouth_x), 1); % intentionally has a different variable name
             exp_ref    = repmat(categorical({expRef}), length(mouth_x), 1); % intentionally has a different variable name
-            
+
             session_table = table(...
                 animal,...
                 exp_ref,...
@@ -120,12 +120,12 @@ for session = 1:height(sessionInfo)
                 lowerlip_x, lowerlip_y,...
                 MovementPC, ...
                 MotionPC);
-            
+
             % Rename them for consistency
             session_table.Properties.VariableNames{'animal'} = 'mouse';
             session_table.Properties.VariableNames{'exp_ref'} = 'expRef';
             session_table.Properties.VariableNames{'event_times'} = 'eventTimes';
-            
+
             % Append to main table
             vidData.(mouse).(sessionField) = session_table;
             disp(['Data assigned for ', mouse, ' - ', expRef]);
@@ -136,5 +136,5 @@ for session = 1:height(sessionInfo)
         % Load video PCs data
         vidSessID = strcat("session_", replace((expRef), "-", "_"));
         obj.vid = vidData.(mouse).(vidSessID);
-    end 
-end   
+    end
+end
