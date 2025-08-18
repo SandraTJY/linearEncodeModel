@@ -10,6 +10,9 @@ addpath(genpath('./utils'));
 addpath(genpath('./external'));
 addpath(genpath('./main'));
 addpath(genpath('./data'));
+addpath(genpath('./exampleData'));
+addpath(genpath('./examples'));
+
 
 %%% --- ENTER YOUR PATHS HERE ---
 % This is where we are now (where the code is to be found):
@@ -24,8 +27,8 @@ options.workDir = fullfile(options.mainDir, 'analysis'); % please change
 currDir = pwd;
 
 % Set data root paths relative to the current directory
-options.bhvDataRoot    = fullfile(currDir, 'data', 'behav');
-options.neuralDataRoot = fullfile(currDir, 'data', 'neural');
+options.bhvDataRoot    = fullfile(currDir, 'exampleData', 'behav');
+options.neuralDataRoot = fullfile(currDir, 'exampleData', 'neural');
 options.vidDataRoot    = '/Volumes/Data'; % macOS config
 
 % Data file name definition
