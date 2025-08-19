@@ -28,8 +28,8 @@ vidDeconv_loadBhvNeuralData;   % Load and Organise neural and behavioral data
 ```
 These scripts compile your data into an obj struct containing:
 
-*obj.neural* – neural data table
-*obj.bhv – behavioral data table
+- *obj.neural* – neural data table
+- *obj.bhv – behavioral data table
 
 *Note*: We have provide examples to give the user an overview how to use the toolbox. Users should modify these scripts to fit their dataset formats, and define/compute any variables they would like to include in the analysis for their own experiment.
 
@@ -60,7 +60,10 @@ This script iterates over all animals and sessions:
 - Extracts video data from the prepared data (`vidData`) (we have provided our loading script in `examples/vidDataLoadingTemplate`, but since it is directly link to the our server and it is not accessible in GitHub, we provide the output (metadata) for this example.)
 - Loops through each animal-session pair and runs the pipeline via run_vidDeconv_config.
 
-*Note*: Ensure that obj contains all necessary data (event, neural, and optional video data) before running the loop.
+*Note*: Upon loading `vidDeconv_loadBhvNeuralData`, please ensure that obj contains all necessary data (event, neural, and optional video data) before running the loop. The `loop_run_vidDeconv` here will help loading `vidData` as *obj.vid*. But for your reference, your *obj* should include the following before you run the model across your subjects and sessions:
+- *obj.neural* – neural data table
+- *obj.bhv – behavioral data table
+- *obj.vid* – video/ continuous data points
 
 ### Usage Example
 ```
