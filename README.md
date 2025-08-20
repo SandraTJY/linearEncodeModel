@@ -39,12 +39,11 @@ Here is an example guideline table for what variable should be put as which type
 | Variable name          | Description                          | Variable type | Category  |
 |------------------------|--------------------------------------|---------------|----------|
 | Motion energy          | Motion PCs in SVDs                    | Analog        | Continuous |
+| Movement energy        | Movement PCs in SVDs                  | Analog        | Continuous |
 | Key Points             | Key Point motion PCs in SVDs          | Analog        | Continuous |
-| Pupil                  | Pupil diameter, extracted from face camera | Analog        | Continuous |
-| Choice                 | Current trial choice onset            | Event kernel  | Task      |
-| Choice alignment       | Current trial choice completion onset | Event kernel  | Task      |
-| Stimulus               | Stimulus contrast                     | Event kernel  | Task      |
-| Reward                 | Reward onset                          | Event kernel  | Task      |
+| Stimulus               | Stimulus contrast                     | Event kernel  | Event      |
+| Choice                 | Current trial choice onset            | Event kernel  | Event      |
+| Reward                 | Reward onset                          | Event kernel  | Event      |
 | Choice History         | Choice from the previous trial       | Trial log     | Trial     |
 | Average motion energy  | Averaged Motion PCs for the trial    | Trial log     | Trial     |
 
