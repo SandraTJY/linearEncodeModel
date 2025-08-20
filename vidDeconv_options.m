@@ -18,11 +18,6 @@ addpath(genpath('./examples'));
 % This is where we are now (where the code is to be found):
 options.codeDir = fileparts(mfilename('fullpath'));
 
-% This is the base root for both raw data and analysis:
-options.mainDir = '/Users/heiwinglau/Documents/Research/DPhil/rotation/lak/'; % please change
-options.rawDir = fullfile(options.mainDir, 'data'); % please change
-options.workDir = fullfile(options.mainDir, 'analysis'); % please change
-
 % Get the current directory
 currDir = pwd;
 
