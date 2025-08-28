@@ -19,12 +19,45 @@ function obj = buildContinuousRegressors(obj, options)
 
     variableTypes = fieldnames(options.variableDefs);
     
+    % --- Collect all continuous variable names and check duplicates ---
+    allVarNames = {};
+    for i = 1:numel(variableTypes)
+        varType = variableTypes{i};
+        def = options.variableDefs.(varType);
+        if strcmp(def.type, 'continuous')
+            allVarNames = [allVarNames, def.vars]; %#ok<AGROW>
+        end
+    end
+
+    % Find duplicates
+    [uniqueVars, ~, ic] = unique(allVarNames);
+    counts = accumarray(ic, 1);
+    dupVars = uniqueVars(counts > 1);
+    if ~isempty(dupVars)
+        warning('Duplicated continuous variable names detected in options.variableDefs:');
+        disp(dupVars');
+    end
+
     for i = 1:numel(variableTypes)
         varType = variableTypes{i};
         def = options.variableDefs.(varType);
         
         if strcmp(def.type, 'continuous')
-            vars = def.vars;
+            % --- Expand regex/wildcard patterns for continuous variables ---
+            expandedVars = {};
+
+            objFields = fieldnames(obj);
+            for j = 1:numel(def.vars)
+                thisVar = def.vars{j};
+                matchIdx = find(~cellfun(@isempty, regexp(objFields, thisVar, 'once')));
+                if ~isempty(matchIdx)
+                    expandedVars = [expandedVars, objFields(matchIdx)]; %#ok<AGROW>
+                else
+                    warning('Continuous variable "%s" not found in obj fields. Skipping.', thisVar);
+                end
+            end
+            
+            vars = unique(expandedVars);
 
             for j = 1:numel(vars)
                 varName = vars{j};

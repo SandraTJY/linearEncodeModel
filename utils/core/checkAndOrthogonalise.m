@@ -4,12 +4,10 @@ function [fullR_ortho, regIdx] = checkAndOrthogonalise( ...
 % between regressor groups (stim, video, trial) after expansion.
 % Orthogonalise in the following order:
 % 1) within task event regressors
-% 2) within instructed movement regressors (e.g., keypoints)
-% 3) within non-instructed (spontaneous) movement regressors (e.g., video PC) 
-% 4) within trial regressor regressors (e.g., previous trial history)
-% 5) instructed movement w.r.t stimulus
-% 6) non-instructed (spont.) movement w.r.t trial + instructed movement
-% 7) trial w.r.t task + instructed movement + non-instructed (spont.) movement
+% 2) within movement regressors
+% 3) within trial regressor regressors (e.g., previous trial history)
+% 4) movement w.r.t stimulus
+% 5) trial w.r.t task + movement
 % if necessary (e.g., high correlation or have linearly dependent columns)
 
 % NOTE: linear dependency is likely to happen when regression combines both binary and continuous variables together. 
@@ -158,7 +156,7 @@ end
 %% Step 3: Rank deficiency across all provided groups
 smallR = [taskBlock, vidBlock, trialBlock];
 if ~isempty(smallR)
-    [~, R, E] = qr(smallR, 0);
+    [~, R, ~] = qr(smallR, 0);
     tol = max(size(smallR)) * eps(norm(R, 'fro'));
     r_before = sum(abs(diag(R)) > tol);
     rankDeficient = r_before < size(smallR, 2);

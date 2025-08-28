@@ -16,45 +16,45 @@ function fullR = getEventDesignMatrix(obj, options)
     % - *fullR*: a *table* that contains the non-time shifted
     % behavioural and video PCs regressors.
 
-    varDefs = options.variableDefs;
-    nTimepoints = numel(obj.globalTime);
-    allData = {};
-    allNames = {};
+varDefs = options.variableDefs;
+nTimepoints = numel(obj.globalTime);
+allData = {};
+allNames = {};
 
-    defNames = fieldnames(varDefs);
+defNames = fieldnames(varDefs);
 
-    for i = 1:numel(defNames)
-        def = varDefs.(defNames{i});
+objFields = fieldnames(obj); % All possible fields in obj
 
-        % Skip types that are not 'event'
-        if ~ismember(def.type, {'event'})
-            continue;
-        end
+for i = 1:numel(defNames)
+    def = varDefs.(defNames{i});
 
-        % Process each base variable name
-        for j = 1:numel(def.vars)
-            baseVar = def.vars{j};
+    % Only event variables
+    if ~ismember(def.type, {'event'})
+        continue;
+    end
 
-            % Get all fields in obj that start with baseVar
-            matchingFields = findMatchingFields(obj, baseVar);
+    for j = 1:numel(def.vars)
+        pattern = def.vars{j};
 
-            for k = 1:numel(matchingFields)
-                fName = matchingFields{k};
-                dataCol = obj.(fName);
+        % Match all obj fields using regex pattern
+        matchIdx = find(~cellfun(@isempty, regexp(objFields, pattern, 'once')));
+        matchingFields = objFields(matchIdx);
 
-                % Only include if it's a column vector of length nTimepoints
-                if isvector(dataCol) && size(dataCol, 1) == nTimepoints
-                    if ~ismember(fName, allNames) % skip duplicates
-                        allData{end+1} = double(dataCol(:));  % ensure column vector
-                        allNames{end+1} = fName;
-                    end
-                else
-                    continue;
+        for k = 1:numel(matchingFields)
+            fName = matchingFields{k};
+            dataCol = obj.(fName);
+
+            % Only include column vector of correct length
+            if isvector(dataCol) && numel(dataCol) == nTimepoints
+                if ~ismember(fName, allNames)
+                    allData{end+1} = double(dataCol(:)); % ensure column vector
+                    allNames{end+1} = fName;
                 end
             end
         end
     end
+end
 
-    % Combine into a table
-    fullR = table(allData{:}, 'VariableNames', allNames);
+% Combine into table
+fullR = table(allData{:}, 'VariableNames', allNames);
 end

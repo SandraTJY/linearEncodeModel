@@ -25,9 +25,29 @@ function obj = buildTrialRegressors(obj, options)
     %   non-time shifted design matrix. These regressors have constant values 
     %   across each trial's time range in *obj.globalTime*.
 
-% Get all variable definitions
+    % Get all variable definitions
     varDefs   = options.variableDefs;
     fieldNames = fieldnames(varDefs);
+
+    % --- Collect all trial variable names and check duplicates ---
+    allVarNames = {};
+    for iField = 1:numel(fieldNames)
+        fieldName = fieldNames{iField};
+        def = varDefs.(fieldName);
+
+        if isfield(def, 'type') && strcmp(def.type, 'trial')
+            allVarNames = [allVarNames, def.vars]; %#ok<AGROW>
+        end
+    end
+
+    % Find duplicates
+    [uniqueVars, ~, ic] = unique(allVarNames);
+    counts = accumarray(ic, 1);
+    dupVars = uniqueVars(counts > 1);
+    if ~isempty(dupVars)
+        warning('Duplicated trial variable names detected in options.variableDefs:');
+        disp(dupVars');
+    end
 
     for iField = 1:numel(fieldNames)
         fieldName = fieldNames{iField};
@@ -38,7 +58,31 @@ function obj = buildTrialRegressors(obj, options)
             continue;
         end
 
-        vars = def.vars;
+        % Read variable-specific beta times (fallback to 0 if missing)
+        preTime  = getfieldwithdefault(def, 'betaPreTime', 0);
+        postTime = getfieldwithdefault(def, 'betaPostTime', 0);
+        
+        if preTime == 0
+            warning('Variable "%s" has betaPreTime = 0 (no pre-trial extension).', fieldName);
+        end
+        if postTime == 0
+            warning('Variable "%s" has betaPostTime = 0 (no post-trial extension).', fieldName);
+        end
+
+        % --- Expand regex/wildcard patterns for trial variables ---
+        expandedVars = {};
+
+        for iVar = 1:numel(def.vars)
+            thisVar = def.vars{iVar};
+            matchIdx = find(~cellfun(@isempty, regexp(obj.bhv.Properties.VariableNames, thisVar, 'once')));
+            if ~isempty(matchIdx)
+                expandedVars = [expandedVars, obj.bhv.Properties.VariableNames(matchIdx)]; %#ok<AGROW>
+            else
+                warning('Trial variable "%s" not found in obj.bhv.Properties.VariableNames. Skipping.', thisVar);
+            end
+        end
+
+        vars = unique(expandedVars);  % remove duplicates
 
         for iVar = 1:numel(vars)
             varName   = vars{iVar};
@@ -63,8 +107,11 @@ function obj = buildTrialRegressors(obj, options)
                     end
 
                     % Find closest indices in global time
-                    [~, startTimeIdx] = min(abs(obj.globalTime - (startT - obj.preTime)));
-                    [~, endTimeIdx]   = min(abs(obj.globalTime - (endT + obj.postTime)));
+                    startT_ext = startT - preTime;
+                    endT_ext   = endT   + postTime;
+                    
+                    [~, startTimeIdx] = min(abs(obj.globalTime - startT_ext));
+                    [~, endTimeIdx]   = min(abs(obj.globalTime - endT_ext));
 
                     % Ensure index order
                     if endTimeIdx < startTimeIdx
@@ -73,10 +120,25 @@ function obj = buildTrialRegressors(obj, options)
                         endTimeIdx = tmp;
                     end
 
-                    % Fill with trial value
-                    regVector((startTimeIdx - (obj.sRate*obj.preTime)):(endTimeIdx + (obj.sRate*obj.postTime))) = val;
+                    % Compute extended indices
+                    startIdxExt = startTimeIdx - round(obj.sRate * preTime);
+                    endIdxExt   = endTimeIdx   + round(obj.sRate * postTime);
+                    
+                    % Check if indices are valid
+                    if startIdxExt < 1 || endIdxExt > numel(regVector)
+                        warning('Extended regressor indices for trial "%s" are out of bounds: [%d, %d]. Clamping to valid range.', ...
+                            varName, startIdxExt, endIdxExt);
+                    end
+
+                    % Clamp indices to valid range
+                    startIdxExt = max(1, startIdxExt);
+                    endIdxExt   = min(numel(regVector), endIdxExt);
+                    
+                    % Fill regressor
+                    regVector(startIdxExt:endIdxExt) = val;
                 end
-                % Otherwise, check if it exists in video table
+            
+            % Otherwise, check if it exists in video table
             elseif ismember(varName, obj.vid.Properties.VariableNames)
                 nVid = numel(obj.vid.eventTimes);
                 for iFrame = 1:height(obj.bhv)
@@ -124,8 +186,8 @@ function obj = buildTrialRegressors(obj, options)
                     trialMean = mean(trialVals, 'omitnan');
 
                     % Get global time indices for regressor filling with extended window
-                    startGlobalIdx = findClosestTimeIdx(obj.globalTime, startT - obj.preTime);
-                    endGlobalIdx   = findClosestTimeIdx(obj.globalTime, endT   + obj.postTime);
+                    startGlobalIdx = findClosestTimeIdx(obj.globalTime, startT - preTime);
+                    endGlobalIdx   = findClosestTimeIdx(obj.globalTime, endT   + postTime);
 
                     % Clamp and order
                     nGlobal = numel(obj.globalTime);

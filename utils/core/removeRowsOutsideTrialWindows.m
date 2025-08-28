@@ -14,23 +14,44 @@ function [cleanedMats, zeroRows, trialVec] = removeRowsOutsideTrialWindows(obj, 
 nTrials = height(obj.bhv);
 nTimePoints = length(obj.globalTime);
 
-% Initialize trial vector with zeros (0 means outside trial window)
+% Initialise trial vector with zeros (0 means outside trial window)
 trialVec = zeros(nTimePoints, 1);
 trialCounter = 1;
 
+% Use global trial boundaries (not per event field)
 for t = 1:nTrials
-    % Original (continuous) trial boundary times
-    rawTStart = obj.bhv.stimulusOnsetTime(t) - obj.preTime;
-    rawTEnd   = obj.bhv.outcomeTime(t) + obj.postTime;
+    % Default pre/post time windows
+    preTime = 0;
+    postTime = 0;
 
-    % Find closest indices in timeVec for start and end times
-    % Note: although find the closest time by the original onset time,
-    % not the time kernel start and end time, since linear encoding
-    % model expands the time kernel by the multiple of the sampling
-    % rate, e.g., (-0.5s and 2s), it wouldn't cause findClosestTimeIdx
-    % to locate a different frame here.
+    fields = fieldnames(obj.variableDefs);
+    for f = 1:numel(fields)
+        def = obj.variableDefs.(fields{f});
+        if strcmp(def.type, 'event')
+
+            % Pre time check
+            if ~isfield(def, 'betaPreTime') || def.betaPreTime == 0
+                error('Event "%s" has betaPreTime = 0 (must be > 0).', fields{f});
+            else
+                preTime = max(preTime, def.betaPreTime);
+            end
+
+            % Post time check
+            if ~isfield(def, 'betaPostTime') || def.betaPostTime == 0
+                error('Event "%s" has betaPostTime = 0 (must be > 0).', fields{f});
+            else
+                postTime = max(postTime, def.betaPostTime);
+            end
+        end
+    end
+
+    % Compute trial boundaries
+    rawTStart = obj.bhv.(obj.firstTrialEvent)(t) - preTime;
+    rawTEnd   = obj.bhv.(obj.lastTrialEvent)(t) + postTime;
+
+    % Find closest indices in global time vector
     startIdx = findClosestTimeIdx(obj.globalTime, rawTStart);
-    endIdx = findClosestTimeIdx(obj.globalTime, rawTEnd);
+    endIdx   = findClosestTimeIdx(obj.globalTime, rawTEnd);
 
     % Mark the trial rows within the window
     trialVec(startIdx:endIdx) = trialCounter;
@@ -47,13 +68,21 @@ cleanedRefMat = refMat(~zeroRows, :);
 cleanedMats = cell(size(varargin));
 for i = 1:numel(varargin)
     mat = varargin{i};
+
+    if isempty(mat)
+        cleanedMats{i} = [];
+        continue;
+    end
+
     if size(mat, 1) ~= nTimePoints
         error('Matrix %d row count does not match timeVec length.', i);
     end
+
     cleanedMats{i} = mat(~zeroRows, :);
 end
 
 % Also update trialVec to only include remaining rows
 trialVec = trialVec(~zeroRows);
+
 end
 
