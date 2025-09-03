@@ -111,29 +111,68 @@ end
 modelNames_full   = allModelNames_full;
 modelNames_subset = allModelNames_subset;
 
-%% 3) Aggregate Plot Across All Neurons
-figure; hold on;
+%% 3) Plot Task Components (Subset DeltaR2) for each neuron
+sessionFields = fieldnames(allObjs);
 
-numModels = numel(modelNames_subset);
+for iObj = 1:numel(sessionFields)
+    sessName = sessionFields{iObj};
+    obj = allObjs.(sessName);
 
-% Plot individual neurons (light grey)
-if ~isempty(allDeltaR2)
-    plot(1:numModels, allDeltaR2', '-', 'Color', [0.6 0.6 0.6 0.3], 'LineWidth', 1);
+    if ~isfield(obj, 'crossVal') || isempty(obj.crossVal)
+        continue;
+    end
+
+    modelFields = fieldnames(obj.crossVal);
+
+    for m = 1:numel(modelFields)
+        modelName = modelFields{m};
+        modelStruct = obj.crossVal.(modelName);
+
+        % Extract full R2
+        if isfield(modelStruct, 'full') && isfield(modelStruct.full, 'R2')
+            R2_full  = modelStruct.full.R2;
+        else
+            R2_full  = NaN;
+        end
+
+        % Extract subset DeltaR2
+        deltaR2 = [];
+        if isfield(modelStruct, 'subset')
+            subsetGroups = fieldnames(modelStruct.subset);
+            deltaR2 = NaN(1, numel(subsetGroups));
+            for s = 1:numel(subsetGroups)
+                subName = subsetGroups{s};
+                if isfield(modelStruct.subset.(subName), 'DeltaR2')
+                    deltaR2(s)  = modelStruct.subset.(subName).DeltaR2;
+                end
+            end
+        end
+
+        %% ---- Make a separate plot for this neuron ----
+        fig = figure('Name', sprintf('%s - %s', sessName, modelName), ...
+                     'NumberTitle','off'); 
+        hold on;
+
+        % plot deltaR2
+        plot(1:numel(deltaR2), deltaR2, '-o', 'LineWidth', 2);
+        yline(0, '--', 'Color', [0.3 0.3 0.3]);
+
+        % axis formatting
+        xticks(1:numel(deltaR2));
+        xticklabels(subsetGroups);
+        xtickangle(45);
+        ylabel('\DeltaR^2', 'FontSize', 12);
+        title(sprintf('Neuron: %s | Session: %s | Full R^2 = %.2f', ...
+                      modelName, sessName, R2_full));
+        grid on;
+
+        % Flag "bad fit"
+        if R2_full < 0.05  % <-- threshold, adjust
+            sgtitle(sprintf('⚠️ Bad Fit: %s - %s', sessName, modelName), 'Color','r');
+        end
+
+        % Optionally save figure
+        saveas(fig, fullfile('NeuronPlots', ...
+               sprintf('%s_%s.png', sessName, modelName)));
+    end
 end
-
-% Compute and plot mean (dark black line)
-meanDelta = mean(allDeltaR2, 1, 'omitnan');
-plot(1:numModels, meanDelta, '-k', 'LineWidth', 3);
-
-% Reference line
-yline(0, '--', 'LineWidth', 1.2, 'Color', [0.2 0.2 0.2]);
-
-% Axis formatting
-xticks(1:numModels);
-xticklabels(modelNames_subset);
-xtickangle(45);
-ylabel('\DeltaR^2 / R^2_{full}', 'FontSize', 14);
-title('Model Contribution Comparison: Task Components');
-ylim([-1, 320]);
-xlim([0.8, numModels + 0.2]);
-grid on;

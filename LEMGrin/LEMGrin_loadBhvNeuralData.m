@@ -8,11 +8,12 @@
 sessionList = options.expRef;
 
 %% --- Loop through mice / sessions ---
-
-allObjs = struct();
+if ~exist('allObjs', 'var') || isempty(allObjs)
+    allObjs = struct();
+end
 
 % for iSub = 1:length(sessionList)
-for iSub = 2:5
+for iSub = [2,3,5]
     session = sessionList{iSub};
 
     %% --- Load behavioural file ---
