@@ -195,58 +195,27 @@ function obj = run_vidDeconv_config(obj, session, options)
             y = obj.([expandedNeuralRefs{n} 'CleanStandardised']);
 
             % Run ridge MML regression
-            [ridgeLambda, ridgeBeta] = ridgeMML(expandR_checked, y, [], true, 30);
+            [ridgeLambda, ridgeBeta] = ridgeMML(expandR_checked, y, [0.01, 0.1, 1, 10], true, 30);
             obj.([expandedNeuralRefs{n} '_ridgeLambda']) = ridgeLambda;
             obj.([expandedNeuralRefs{n} '_ridgeBeta'])   = ridgeBeta;
 
             % Run full model 10-fold cross validation
+            numFolds = 10;
             [fullPred, fullBeta, ~, fullIdx, fullRidge, fullLabels] = ...
-                crossValModel(expandR_checked, y, regLabels, regIdx, regLabels, 10, trialVec);
+                crossValModel(expandR_checked, y, regLabels, regIdx, regLabels, numFolds, trialVec);
 
             r_fullModel = corr(fullPred(:), y(:)); % Calculate full model Pearson's R
             R2_fullModel = r_fullModel^2; % Calculate R2 (goodness of fit)
 
-            % Run subset model 10-fold cross validation
-            subsetVars = [];
-            eventGroups = fieldnames(obj.variableDefs);
+            % Save full model data
+            obj.crossVal.(expandedNeuralRefs{n}).full = struct( ...
+                'Pred', fullPred, ...
+                'Beta', fullBeta, ...
+                'r', r_fullModel, ...
+                'R2', R2_fullModel);
 
-            % for iG = 1:numel(eventGroups)
-            %     groupName = eventGroups{iG};
-            %     groupDef = obj.variableDefs.(groupName);
-            %     vars = groupDef.vars;
-            %
-            %     if  strcmp(groupDef.type, 'neural')
-            %         continue
-            %     end
-            %
-            %     for iVars = 1:numel(vars)
-            %         thisVar = vars{iVars};
-            %
-            %         % Expand wildcard using regex against obj.bhv columns
-            %         subsetMatchIdx = find(~cellfun(@isempty, regexp(taskLabels, thisVar, 'once')));
-            %         % if ~isempty(subsetMatchIdx)
-            %         %     subsetIdx = find(ismember(taskIdx, subsetMatchIdx));
-            %         %     subsetMat = taskMat(:, subsetIdx);
-            %         % else
-            %         %     warning('Variable pattern "%s" did not match any columns in taskMat. Skipping.', thisVar);
-            %         % end
-            %
-            %         [subsetPred, subsetBeta, ~, ~, ~, ~] = crossValModel( ...
-            %             taskMat, y, taskLabels(subsetMatchIdx), taskIdx, taskLabels, 10, trialVec);
-            %
-            %         r_subsetModel = corr(subsetPred(:), y(:));
-            %         R2_subsetModel = r_subsetModel^2;
-            %         DeltaR2_subsetModel = (R2_subsetModel - R2_fullModel) / R2_fullModel;
-            %
-            %         % Save subset model output
-            %         obj.crossVal.subset.(['exclu_' groupName]).Pred   = subsetPred;
-            %         obj.crossVal.subset.(['exclu_' groupName]).Beta = subsetBeta;
-            %         obj.crossVal.subset.(['exclu_' groupName]).r   = r_subsetModel;
-            %         obj.crossVal.subset.(['exclu_' groupName]).R2 = R2_subsetModel;
-            %         obj.crossVal.subset.(['exclu_' groupName]).DeltaR2  = DeltaR2_subsetModel;
-            %     end
-            %
-            % end
+            % Run subset model 10-fold cross validation
+            eventGroups = fieldnames(obj.variableDefs);
 
             for iG = 1:numel(eventGroups)
                 groupName = eventGroups{iG};
@@ -281,6 +250,14 @@ function obj = run_vidDeconv_config(obj, session, options)
                 R2_subsetModel    = r_subsetModel^2;
                 DeltaR2_subsetModel = (R2_subsetModel - R2_fullModel) / R2_fullModel;
 
+                % Calculate relative change in R2
+                if abs(R2_fullModel) < 1e-6
+                    warning('R² of full model is near zero (%.5f). DeltaR² calculation may be unreliable or produce Inf/NaN.', R2_fullModel);
+                    DeltaR2_subsetModel = NaN;  % assign NaN to avoid misleading values
+                else
+                    DeltaR2_subsetModel = (R2_subsetModel - R2_fullModel) / R2_fullModel;
+                end
+
                 % With all subset results
                 subsetResults = struct( ...
                     'Pred',    subsetPred, ...
@@ -292,12 +269,6 @@ function obj = run_vidDeconv_config(obj, session, options)
                 % Save under the group name
                 obj.crossVal.(expandedNeuralRefs{n}).subset.(sprintf('exclu_%s', groupName)) = subsetResults;
             end
-
-            obj.crossVal.(expandedNeuralRefs{n}).full = struct( ...
-                'Pred', fullPred, ...
-                'Beta', fullBeta, ...
-                'r', r_fullModel, ...
-                'R2', R2_fullModel);
         end
 
     catch ME

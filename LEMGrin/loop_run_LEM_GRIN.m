@@ -11,27 +11,31 @@
     % you store your video data, but you can treat this as a template to load
     % your own data.
 
-expRef = options.expRef;
+% Ensure allObjs exists and is not empty
+if ~exist('allObjs', 'var') || isempty(allObjs)
+    error('allObjs does not exist or is empty. Please load your session data first.');
+end
 
-% Initialise container for processed sessions
-processedObj = struct();
+% Get all session names (fields of allObjs)
+sessionList = fieldnames(allObjs);
 
-for i = 1:length(expRef)
-    sessionName = expRef{i};
-    fieldName   = matlab.lang.makeValidName(['session_' sessionName]); % MATLAB-compatible field name
-
+% for i = 1:numel(sessionList)
+for i = 1:6
+    sessionName = sessionList{i};
+    objSession  = allObjs.(sessionName); % get the session struct
+    
     % Run the configuration for this session
-    objSession = run_vidDeconv_config(obj, sessionName, options);
-
+    processedSession = run_vidDeconv_config(objSession, sessionName, options);
+    
     % Save the processed object in the structured container
-    processedObj.(fieldName) = objSession;
-
+    allObjs.(sessionName) = processedSession;
+    
     % Optional: display progress
     fprintf('Processed session: %s\n', sessionName);
 end
 
 % Save the full processedObj for later use
-saveFileName = fullfile(options.savePath, 'processed_sessions.mat'); % set your save path
-save(saveFileName, 'processedObj', '-v7.3');
+saveFileName = fullfile('allObjs_sessions.mat'); % set your save path
+save(saveFileName, 'allObjs', '-v7.3');
 
 fprintf('All sessions processed and saved to %s\n', saveFileName);
