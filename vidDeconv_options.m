@@ -17,20 +17,20 @@ addpath(genpath('./examples'));
 % This is where we are now (where the code is to be found):
 options.codeDir = fileparts(mfilename('fullpath'));
 
-% Get the current directory
-currDir = pwd;
+% Set the current directory as STan's QNAP
+currDir = pwd; %'//qnap-al001.dpag.ox.ac.uk/STan/Data/cingulateDMS_output/analysis/';
 
 % Set data root paths relative to the current directory
-options.bhvDataRoot    = fullfile(currDir, 'exampleData', 'behav');
-options.neuralDataRoot = fullfile(currDir, 'exampleData', 'neural');
-options.vidDataRoot    = '/Volumes/Data'; % macOS config
+options.bhvDataRoot    = fullfile(currDir, 'exampleData', 'behav'); %currDir; %
+options.neuralDataRoot = fullfile(currDir, 'exampleData', 'neural'); %currDir; %
+options.vidDataRoot    = '//qnap-al001.dpag.ox.ac.uk/Data'; % Sandra Office config
 
 % Data file name definition
-options.bhvFileExtension = '_behav_probability_sessions.csv'; % please change
+options.bhvFileExtension = '_behav_probability_sessions.csv'; %'_CorrectedeventTimes.csv'; % please change
 options.neuralFileExtension = '_fluor_timeseries_probability_sessions.csv'; % please change
 
 % Optional steps - plotting design matrix for each regressor group
-options.plotDesignMatrix = false;
+options.plotDesignMatrix = true;
 
 %%%--- Animal IDs -------------------------------------------------%%%
 % Archived options
@@ -43,6 +43,8 @@ options.animal = {'MFE008'};
 options.sRate = 20;  % Hz
 options.preTime = 0.5; % time before the onset of an event that is included in the time kernel
 options.postTime = 2; % time after the onset of an event that is included in the time kernel
+options.firstTrialEvent = 'stimulusOnsetTime';
+options.lastTrialEvent = 'outcomeTime';
 
 %-- Linear Encoding Model Variable Definitions --------------------------------------------------%
 options.variableDefs = struct( ...
@@ -76,7 +78,8 @@ options.variableDefs = struct( ...
   ), ...
   'neural', struct( ...
       'type', 'neural', ...
-      'timeRef', {{'LeftDLS_DA', 'RightDLS_ACH'}} ...
+      'timeRef', 'Timestamp', ...
+      'vars', {{'LeftDLS_DA', 'RightDLS_ACH'}} ...
   ), ...
   'vid', struct( ...
       'type', 'continuous', ...

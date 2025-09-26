@@ -79,9 +79,9 @@ function obj = buildContinuousRegressors(obj, options)
 
                     % Only process multi-column matrices (more than 1 row/ column)
                     if size(data, 1) > 1 && size(data, 2) > 1
-                        for k = 1:size(data, 2) % the column should be the event time series
+                        for k = 1:size(data, 2) % the first column should be the event time series
                             newField = sprintf('%s%d', varName, k);
-                            obj.(newField) = data(:,k)';
+                            obj.(newField) = data{:,k}';
                         end
                     end
                 else

@@ -59,6 +59,7 @@ function obj = buildTrialRegressors(obj, options)
         end
 
         % Read variable-specific beta times (fallback to 0 if missing)
+
         preTime  = getfieldwithdefault(def, 'betaPreTime', 0);
         postTime = getfieldwithdefault(def, 'betaPostTime', 0);
         
@@ -224,4 +225,6 @@ function obj = buildTrialRegressors(obj, options)
             obj.(['trial_' varName]) = regVector(:); % Ensure column vector
         end
     end
+
 end
+

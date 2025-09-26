@@ -13,10 +13,10 @@
 
 % tmp = load('./exampleData/vid/vidData'); % Usually you would have a separate script to load and format the data
 
-sessionList = options.expRef;
+sessionList = {options.expRef};
 
-% for i = 1:length(sessionList)
-for i = 3:5
+for i = 1:length(sessionList)
+% for i = 3:5
     session = sessionList{i};
     sessionField = matlab.lang.makeValidName(['session_' session]);
 

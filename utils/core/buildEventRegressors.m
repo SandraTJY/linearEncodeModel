@@ -33,7 +33,7 @@ eventGroups = fieldnames(options.variableDefs);
 
 for iG = 1:numel(eventGroups)
     groupName = eventGroups{iG};
-    groupDef = obj.variableDefs.(groupName);
+    groupDef = options.variableDefs.(groupName);
 
     % Only consider groups of type 'event'
     if isfield(groupDef, 'type') && strcmp(groupDef.type, 'event')

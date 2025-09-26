@@ -29,6 +29,7 @@ end
 
 % get the full path for each experiments block
 blockpath = dat.expFilePath(varargin{:}, 'block', 'remote');
+disp(isfile(blockpath));
 
 if iscell(blockpath)
   block = mapToCell(filterFun, mapToCell(@loadFun, blockpath));

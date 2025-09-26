@@ -40,7 +40,7 @@ obj.globalTime      = obj.globalStartTime : 1/obj.sRate : obj.globalEndTime;
 nT = numel(obj.globalTime);
 
 % --- Neural Interpolation ---
-neuralTime = obj.neural.(obj.variableDefs.neural.timeRef);
+neuralTime = obj.neural.(obj.variableDefs.neural.timeRef); 
 obj.neuralInterpolated = struct();  % holds any interpolated neural signal
 
 neuralVars = obj.variableDefs.neural.vars;  % e.g., {'cell.*'}
@@ -73,6 +73,9 @@ if isfield(obj, 'vid') && ~isempty(obj.vid) && isfield(options.variableDefs, 'vi
     % Keypoints
     obj = interpolateContinuous(obj, obj.variableDefs.keypoint, 'vid', nT);
 end
+
+% --- Binned lick data ---
+
 
 end
 

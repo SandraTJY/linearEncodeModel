@@ -6,21 +6,23 @@
 % Define subjects and sessions
 mouseList = {'MFE008'};
 sessionList = {'2022-09-13_1'};
+options = vidDeconv_options;
+options.plotDesignMatrix = true;
 
 for i = 1:length(mouseList)
     mouse = mouseList{i};
     session = sessionList{i};
     expRef = strcat(session, '_', mouse);
     lookupKey = strcat(expRef(1:10), '_', expRef(12), '_', mouse);
+
+    % --- Load the behavioural file ---
+    bhvFile = fullfile(options.bhvDataRoot, [(mouse), options.bhvFileExtension]);
     opts = detectImportOptions(bhvFile, 'Delimiter', ',', 'ReadVariableNames', true);
+    bhvTable = readtable(bhvFile, opts);
 
     % --- Load neural data ---
     neuralFile = fullfile(options.neuralDataRoot, [(mouse), options.neuralFileExtension]);
     neuralTable = readtable(neuralFile, opts);
-
-    % --- Load the behavioural file ---
-    bhvFile = fullfile(options.bhvDataRoot, [(mouse), options.bhvFileExtension]);
-    bhvTable = readtable(bhvFile, opts);
     
     % Put the data tables of this animal and session to obj
     obj.neural = neuralTable(strcmp(neuralTable.expRef, lookupKey), :);

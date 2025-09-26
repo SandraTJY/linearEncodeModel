@@ -30,7 +30,7 @@ for t = 1:nTrials
         if strcmp(def.type, 'event')
 
             % Pre time check
-            if ~isfield(def, 'betaPreTime') || def.betaPreTime == 0
+            if ~isfield(def, 'betaPreTime') %|| def.betaPreTime == 0
                 error('Event "%s" has betaPreTime = 0 (must be > 0).', fields{f});
             else
                 preTime = max(preTime, def.betaPreTime);
@@ -75,6 +75,7 @@ for i = 1:numel(varargin)
     end
 
     if size(mat, 1) ~= nTimePoints
+        disp(size(mat));
         error('Matrix %d row count does not match timeVec length.', i);
     end
 

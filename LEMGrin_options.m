@@ -18,8 +18,8 @@ addpath(genpath('../examples'));
 addpath(genpath(pwd)); % You should be at the root of your code directory
 
 % Set data root paths relative to the current directory
-options.bhvDataRoot    = '/Volumes/JMoretti/Analysis_2p_isabel_JM007-JM026_twoP_Value2AFC_goodBehav/analysis';
-options.neuralDataRoot = '/Volumes/JMoretti/Analysis_2p_isabel_JM007-JM026_twoP_Value2AFC_goodBehav/analysis';
+options.bhvDataRoot    = '//qnap-al001.dpag.ox.ac.uk/JMoretti/Analysis_2p_isabel_JM007-JM026_twoP_Value2AFC_goodBehav/analysis';
+options.neuralDataRoot = '//qnap-al001.dpag.ox.ac.uk/JMoretti/Analysis_2p_isabel_JM007-JM026_twoP_Value2AFC_goodBehav/analysis';
 options.neuralDataTimestampExtension = '_imaging_frames.txt';
 options.vidDataRoot    = '/Volumes/Data'; % macOS config
 

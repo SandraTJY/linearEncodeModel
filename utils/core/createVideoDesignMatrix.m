@@ -41,7 +41,7 @@ for i = 1:numel(varNames)
                 else
                     % Single column numeric or other types
                     vidLabels{end+1} = varName;
-                    vidDataCells{end+1} = data(:);
+                    vidDataCells{end+1} = data(:,:);
                 end
             
             else
