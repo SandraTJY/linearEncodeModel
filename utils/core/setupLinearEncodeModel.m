@@ -35,7 +35,7 @@ obj.bhvTrialCnt = height(obj.bhv);
 
 % --- Global Time Axis ---
 obj.globalStartTime = min(obj.bhv.(obj.firstTrialEvent)) - 5; % Padding - making sure the global timeline encompasses all events
-obj.globalEndTime   = max(obj.bhv.(obj.lastTrialEvent)) + 5; % Padding - making sure the global timeline encompasses all events;
+obj.globalEndTime   = max(obj.bhv.(obj.lastTrialEvent)) + 20; % Padding - making sure the global timeline encompasses all events;
 obj.globalTime      = obj.globalStartTime : 1/obj.sRate : obj.globalEndTime;
 nT = numel(obj.globalTime);
 
@@ -65,17 +65,50 @@ for i = 1:numel(neuralVars)
     end
 end
 
-% --- Continuous Data Interpolation ---
-if isfield(obj, 'vid') && ~isempty(obj.vid) && isfield(options.variableDefs, 'vid')
-    % Video PCs
-    obj = interpolateContinuous(obj, obj.variableDefs.vid, 'vid', nT);
-    
-    % Keypoints
-    obj = interpolateContinuous(obj, obj.variableDefs.keypoint, 'vid', nT);
-end
+% % --- Continuous Vid Data Interpolation ---
+% if isfield(obj, 'vid') && ~isempty(obj.vid) && isfield(options.variableDefs, 'vid')
+%     % Video PCs
+%     obj = interpolateContinuous(obj, obj.variableDefs.vid, 'vid', nT);
+% 
+%     % Keypoints
+%     obj = interpolateContinuous(obj, obj.variableDefs.keypoint, 'vid', nT);
+% end
 
-% --- Binned lick data ---
+% --- Other Continuous data interpolation ---
+varNames = fieldnames(options.variableDefs);
+hasContinuous = any(cellfun(@(f) strcmpi(options.variableDefs.(f).type, 'continuous'), varNames));
+if hasContinuous
+    for i = 1:numel(varNames)
+        varType = varNames{i};
+        def = options.variableDefs.(varType);
+        
+        if strcmp(def.type, 'continuous')
+            % --- Expand regex/wildcard patterns for continuous variables ---
+            expandedVars = {};
 
-
+            objFields = fieldnames(obj);
+            for j = 1:numel(def.vars)
+                thisVar = def.vars{j};
+                matchIdx = find(~cellfun(@isempty, regexp(objFields, thisVar, 'once')));
+                if ~isempty(matchIdx)
+                    expandedVars = [expandedVars, objFields(matchIdx)]; %#ok<AGROW>
+                else
+                    warning('Continuous variable "%s" not found in obj fields. Skipping.', thisVar);
+                end
+            end
+            % Pull out the unique continuous variables (no duplicates)
+            vars = unique(expandedVars);
+            for j = 1:numel(vars)
+                varName = vars{j};
+                if isfield(obj, varName)
+                    % data = obj.(varName);
+                    obj = interpolateContinuous(obj, obj.variableDefs.(varName), varName, nT);
+                    disp("Interpolated continuous variable " + varName + " and saved in obj")
+                else
+                    warning('Continuous variable "%s" not found in obj fields. Not interpolating.', varName);
+                end
+            end
+        end
+    end
 end
 

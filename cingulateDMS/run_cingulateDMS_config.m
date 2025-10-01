@@ -196,16 +196,16 @@ function obj = run_cingulateDMS_config(obj, session, options)
                                                 'regIdx', regIdx);
 
         %% 10. Ridge regression + cross validation for each neural regressor
-        for n = 1:2 %numel(expandedNeuralRefs)
+        for n = 1:51 % numel(expandedNeuralRefs) % 2 % 
             y = obj.([expandedNeuralRefs{n} 'CleanStandardised']);
 
             % Run ridge MML regression
-            [ridgeLambda, ridgeBeta] = ridgeMML(expandR_checked, y, [0.01, 0.1, 1, 10], true, 30);
+            [ridgeLambda, ridgeBeta] = ridgeMML(expandR_checked, y, 30, true, 30);
             obj.([expandedNeuralRefs{n} '_ridgeLambda']) = ridgeLambda;
             obj.([expandedNeuralRefs{n} '_ridgeBeta'])   = ridgeBeta;
 
             % Run full model 10-fold cross validation
-            numFolds = 5;
+           numFolds = 5;
             [fullPred, fullBeta, ~, fullIdx, fullRidge, fullLabels] = ...
                 crossValModel(expandR_checked, y, regLabels, regIdx, regLabels, numFolds, trialVec);
 

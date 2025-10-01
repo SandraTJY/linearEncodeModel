@@ -53,10 +53,12 @@ for iSub = 1:length(sessionList)
 
         %% --- Licktrace file ---
         lickTraceFile = dir(fullfile(options.bhvDataRoot, animalID, session, (options.lickTraceFileExtension)));
-        lickTraceFile = fullfile(lickTraceFile(1).folder, lickTraceFile(1).name);
-        if isfile(timestampFile)
-            lickTraceTable = readtable(lickTraceFile, 'Delimiter', ',', 'ReadVariableNames', true);
-            obj.lickTrace = lickTraceTable;
+        if ~isempty(lickTraceFile)
+            lickTraceFile = fullfile(lickTraceFile(1).folder, lickTraceFile(1).name);
+            if isfile(lickTraceFile)
+                lickTraceTable = readtable(lickTraceFile, 'Delimiter', ',', 'ReadVariableNames', true);
+                obj.lickTrace = lickTraceTable;
+            end
         end
 
         %% --- Exclude session if any files missing ---
@@ -70,25 +72,24 @@ for iSub = 1:length(sessionList)
         bhvTable = readtable(bhvFile, 'Delimiter', ',', 'ReadVariableNames', true);
         bhvTable.Properties.VariableNames = matlab.lang.makeValidName(bhvTable.Properties.VariableNames);
 
-        % Small code chunk to fill in NaN rewardTimes in unrewarded trials
-        rewardTimes = bhvTable.(options.variableDefs.reward.timeRef);
-        stimulusOnsetTimes = bhvTable.(options.variableDefs.stimulus.timeRef);
-        bhvTable.(options.variableDefs.reward.timeRef)(isnan(rewardTimes)) = stimulusOnsetTimes(isnan(rewardTimes)) + (options.variableDefs.stimulus.betaPostTime);
-
         % Also, modify any Time column with trialOffsets if applicable
         if ismember('trialOffsets', bhvTable.Properties.VariableNames)
             trialOffsets = bhvTable.trialOffsets;
             % Get Time columns, and reassign their values to incorporate
             % trialOffsets
-            mask = endsWith(bhvTable.Properties.VariableNames, 'Time');
+            mask = find(~cellfun('isempty', regexp(bhvTable.Properties.VariableNames, 'Time')));
             for c = 1:numel(mask)
-                if mask(c)==1
-                    colName = string(bhvTable.Properties.VariableNames(c));
-                    bhvTable.(colName) = bhvTable.(colName) + trialOffsets; 
-                end
+                colName = string(bhvTable.Properties.VariableNames(mask(c)));
+                bhvTable.(colName) = bhvTable.(colName) + trialOffsets; 
             end
         end
-
+        
+        % Small code chunk to fill in NaN rewardTimes in unrewarded trials
+        rewardTimes = bhvTable.rewardTime; % (options.variableDefs.reward.timeRef);
+        stimulusOnsetTimes = bhvTable.stimulusOnsetTime; % (options.variableDefs.stimulus.timeRef);
+        rewardTimes(isnan(rewardTimes)) = stimulusOnsetTimes(isnan(rewardTimes)) + 2; %(options.variableDefs.stimulus.betaPostTime);
+           
+        bhvTable.rewardTime = rewardTimes;
         obj.bhv = bhvTable;
 
         neuralTable = readtable(neuralFile);
@@ -131,23 +132,50 @@ for iSub = 1:length(sessionList)
         % --- Initialise reward/noReward (x stim) columns ---
         obj.bhv.rewarded = nan(nTrials,1);
         obj.bhv.unrewarded = nan(nTrials,1);
-        for k = 1:numel(rewardProbLabels)
-            trials_mask = strcmp(obj.bhv.stimName, string(rewardProbLabels{k}));
-            allTrialsRewarded = sum(obj.bhv.rewardVolume(trials_mask) > 0) == sum(trials_mask);
-            allTrialsUnrewarded = sum(obj.bhv.rewardVolume(trials_mask) == 0) == sum(trials_mask);
 
-            if allTrialsRewarded % i.e. 100% stim
-                obj.bhv.(['stim' rewardProbLabels{k} '_rewarded']) = nan(nTrials,1);
-            elseif allTrialsUnrewarded % i.e. 0% stim
-                obj.bhv.(['stim' rewardProbLabels{k} '_unrewarded']) = nan(nTrials,1);
-            elseif ~allTrialsRewarded && ~allTrialsUnrewarded
-                obj.bhv.(['stim' rewardProbLabels{k} '_rewarded']) = nan(nTrials,1);
-                obj.bhv.(['stim' rewardProbLabels{k} '_unrewarded']) = nan(nTrials,1);
+        % --- StimOnset and RewardOnset ---
+        if ismember('stimOnset', fieldnames(options.variableDefs))
+            obj.bhv.stimOnset = ones(nTrials,1);
+        end
+        if ismember('stimOffset', fieldnames(options.variableDefs))
+            obj.bhv.stimOffset = ones(nTrials,1);
+        end
+        if ismember('rewardOnset', fieldnames(options.variableDefs))
+            obj.bhv.rewardOnset = (obj.bhv.rewardVolume>0);
+            % Rep rewardOnset as (-1,1) not (0,1)?
+            obj.bhv.rewardOnset(~obj.bhv.rewardVolume>0) = -1 * ones(size(size(obj.bhv.rewardOnset(~obj.bhv.rewardVolume>0))));
+        end
+
+        % --- First lick post-stim --- %
+        if ismember('prelickOnset', fieldnames(options.variableDefs))
+            varName = options.variableDefs.prelickOnset.vars{1};
+            prelickOnsetTimes = obj.bhv.(options.variableDefs.prelickOnset.timeRef);
+            obj.bhv.(varName) = zeros(nTrials, 1);
+            obj.bhv.(varName)(~isnan(prelickOnsetTimes)) = 1;
+        end
+
+        % --- Stimulus X Prelick interaction --- %
+        if ismember('stimulusXprelick', fieldnames(options.variableDefs))
+            for k = 1:numel(rewardProbLabels)
+                trials_mask = strcmp(obj.bhv.stimName, string(rewardProbLabels{k}));
+                allTrialsRewarded = sum(obj.bhv.rewardVolume(trials_mask) > 0) == sum(trials_mask);
+                allTrialsUnrewarded = sum(obj.bhv.rewardVolume(trials_mask) == 0) == sum(trials_mask);
+    
+                if allTrialsRewarded % i.e. 100% stim
+                    obj.bhv.(['stim' rewardProbLabels{k} '_rewarded']) = nan(nTrials,1);
+                elseif allTrialsUnrewarded % i.e. 0% stim
+                    obj.bhv.(['stim' rewardProbLabels{k} '_unrewarded']) = nan(nTrials,1);
+                elseif ~allTrialsRewarded && ~allTrialsUnrewarded
+                    obj.bhv.(['stim' rewardProbLabels{k} '_rewarded']) = nan(nTrials,1);
+                    obj.bhv.(['stim' rewardProbLabels{k} '_unrewarded']) = nan(nTrials,1);
+                end
             end
         end
 
         % --- Initialise prelicked columns ---
-        obj.bhv.prelick = nan(nTrials,1);
+        if ismember('prelick', fieldnames(options.variableDefs))
+            obj.bhv.prelick = nan(nTrials,1);
+        end
 
         % --- Initialise choice columns for relevant bhvTables only ---
         if ismember('choice', obj.bhv.Properties.VariableNames)
@@ -168,7 +196,9 @@ for iSub = 1:length(sessionList)
                 obj.bhv.unrewarded(t) = obj.bhv.rewardVolume(t) == 0;
 
                 % Prelicked columns
-                obj.bhv.prelick(t) = obj.bhv.lickData_binned(t) > 0;
+                if ismember('prelick', obj.bhv.Properties.VariableNames)
+                    obj.bhv.prelick(t) = obj.bhv.lickData_binned(t) > 0;
+                end
 
                 % Choice columns
                 if ismember('choice', obj.bhv.Properties.VariableNames)
@@ -189,25 +219,28 @@ for iSub = 1:length(sessionList)
 
         %% --- Populate interaction columns ---
         % Stim x Rewarded columns
-        for k = 1:numel(rewardProbLabels)
-            if ismember(['stim' rewardProbLabels{k} '_rewarded'], obj.bhv.Properties.VariableNames)
-                obj.bhv.(['stim' rewardProbLabels{k} '_rewarded']) = obj.bhv.(['stim' rewardProbLabels{k}]) & obj.bhv.rewarded;
-            end
-            if ismember(['stim' rewardProbLabels{k} '_unrewarded'], obj.bhv.Properties.VariableNames)
-                obj.bhv.(['stim' rewardProbLabels{k} '_unrewarded']) = obj.bhv.(['stim' rewardProbLabels{k}]) & obj.bhv.unrewarded;
-
+        if ismember('stimulusXreward', fieldnames(options.variableDefs))
+            for k = 1:numel(rewardProbLabels)
+                if ismember(['stim' rewardProbLabels{k} '_rewarded'], obj.bhv.Properties.VariableNames)
+                    obj.bhv.(['stim' rewardProbLabels{k} '_rewarded']) = obj.bhv.(['stim' rewardProbLabels{k}]) & obj.bhv.rewarded;
+                end
+                if ismember(['stim' rewardProbLabels{k} '_unrewarded'], obj.bhv.Properties.VariableNames)
+                    obj.bhv.(['stim' rewardProbLabels{k} '_unrewarded']) = obj.bhv.(['stim' rewardProbLabels{k}]) & obj.bhv.unrewarded;
+    
+                end
             end
         end
 
         % Stim x Prelicked columns
-        % Initialise
-        for k = 1:numel(rewardProbLabels)
-            trials_mask = strcmp(obj.bhv.stimName, string(rewardProbLabels{k}));
-            allTrialsPrelicked = sum(obj.bhv.prelick(trials_mask) > 0) == sum(trials_mask);
-            allTrialsNonlicked = sum(obj.bhv.prelick(trials_mask) == 0) == sum(trials_mask);
-            if ~allTrialsPrelicked && ~allTrialsNonlicked
-                obj.bhv.(['stim' rewardProbLabels{k} '_prelicked']) = obj.bhv.(['stim' rewardProbLabels{k}]) & obj.bhv.prelick;
-                obj.bhv.(['stim' rewardProbLabels{k} '_nonlicked']) = obj.bhv.(['stim' rewardProbLabels{k}]) & ~obj.bhv.prelick;
+        if ismember('stimulusXprelick', fieldnames(options.variableDefs))
+            for k = 1:numel(rewardProbLabels)
+                trials_mask = strcmp(obj.bhv.stimName, string(rewardProbLabels{k}));
+                allTrialsPrelicked = sum(obj.bhv.prelick(trials_mask) > 0) == sum(trials_mask);
+                allTrialsNonlicked = sum(obj.bhv.prelick(trials_mask) == 0) == sum(trials_mask);
+                if ~allTrialsPrelicked && ~allTrialsNonlicked
+                    obj.bhv.(['stim' rewardProbLabels{k} '_prelicked']) = obj.bhv.(['stim' rewardProbLabels{k}]) & obj.bhv.prelick;
+                    obj.bhv.(['stim' rewardProbLabels{k} '_nonlicked']) = obj.bhv.(['stim' rewardProbLabels{k}]) & ~obj.bhv.prelick;
+                end
             end
         end
 

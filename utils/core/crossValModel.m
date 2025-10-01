@@ -58,7 +58,7 @@ function [neuralPred, cBeta, cR, subIdx, cRidge, cLabels_sorted] = crossValModel
         trainIdx   = ~testIdx;
 
         if iFolds == 1
-            [cRidge, cBeta{iFolds}] = ridgeMML(cR(trainIdx, :), Y(trainIdx,:), [0.01, 0.1, 1, 10], true);
+            [cRidge, cBeta{iFolds}] = ridgeMML(cR(trainIdx, :), Y(trainIdx,:), 30, true);
         else
             [~, cBeta{iFolds}] = ridgeMML(cR(trainIdx, :), Y(trainIdx,:), cRidge, true);
         end

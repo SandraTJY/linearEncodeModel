@@ -34,7 +34,12 @@ function obj = interpolateContinuous(obj, defStruct, dataSource, nT)
         
         % Interpolate and store in top-level obj
         if numel(y) ~= nT
-            obj.(varName) = interp1(eventTimes, y, obj.globalTime, 'linear', 'extrap');
+            interp_y = interp1(eventTimes, y, obj.globalTime, 'linear', 'extrap');
+            % Transpose if interp_y is in wrong shape
+            if size(interp_y, 1) ~= nT
+                interp_y = reshape(interp_y, [size(interp_y, 2), size(interp_y, 1)]);
+            end
+            obj.(varName) = interp_y;
         else
             obj.(varName) = y;
         end
