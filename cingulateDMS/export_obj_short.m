@@ -1,14 +1,20 @@
 %% For exporting only the parts of obj that are needed in Python
-output_dir = "C:\Users\stan\Documents\GitHub\linearEncodeModel\cingulateDMS\2025-07-23_1_SAT037\model_10-01_stimOnlickTrace";
+output_dir = "\\qnap-al001.dpag.ox.ac.uk\STan\Data\linearEncodeModel_output\2025-07-23_1_SAT037\model_10-15_stimreward";
 mkdir(output_dir)
 all_variables = fieldnames(obj);
 variables_keep = [];
 for v = 1:numel(all_variables)
-    if (~startsWith(all_variables(v), 'cell') || startsWith(all_variables(v), 'cell50')) && ~startsWith(all_variables(v), 'crossVa') % Do not export all the cell-specific traces, but keep regression results in crossVal
-        variables_keep = [variables_keep all_variables(v)];
+    if ~startsWith(all_variables(v), 'crossVa') % Only export clean and standardised cell-specific traces, but keep regression results in crossVal
+        if startsWith(all_variables(v), 'cell') 
+                if endsWith(all_variables(v), 'CleanStandardised')
+                    variables_keep = [variables_keep all_variables(v)]; 
+                end
+        else
+            variables_keep = [variables_keep all_variables(v)]; 
+        end
     end
 end
-disp(variables_keep);
+% disp(variables_keep);
 
 obj_export = struct();
 for v = 1:numel(variables_keep)

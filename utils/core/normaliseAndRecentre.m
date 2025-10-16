@@ -1,4 +1,4 @@
-function [X, Y] = normaliseAndRecentre(X, Y)
+function [X, Y] = normaliseAndRecentre(X, Y, normaliseX)
 % *normaliseAndRecentre*: Normalises and optionally recentres X and Y matrices
 % INPUT:
 % X        - design matrix [nFrames x nPredictors]
@@ -12,11 +12,13 @@ pY = size(Y, 2);
 
 % Compute means and stds
 XStd = std(X, 0, 1);
-X = bsxfun(@rdivide, X, XStd);  % always normalise
-
 XMean = mean(X, 1);
 YMean = mean(Y, 1);
-X = bsxfun(@minus, X, XMean);
+if normaliseX
+    X = bsxfun(@rdivide, X, XStd);  % normalise if asked
+    X = bsxfun(@minus, X, XMean);
+end
+
 Y = bsxfun(@minus, Y, YMean);
 
 % Prepare XTX, ep, renorm, betas

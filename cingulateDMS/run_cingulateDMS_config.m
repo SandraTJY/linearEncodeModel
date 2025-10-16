@@ -179,9 +179,15 @@ function obj = run_cingulateDMS_config(obj, session, options)
         expandR_raw = [taskMatClean, vidMatClean, trialMatClean];
         regLabels   = [taskLabels, vidLabels, trialLabels];
 
+        if hasContinuous
+            normaliseR = true;
+        else 
+            normaliseR = false;
+        end
+
         for n = 1:numel(expandedNeuralRefs)
             [expandR_standardised, obj.([expandedNeuralRefs{n} 'CleanStandardised'])] = ...
-                normaliseAndRecentre(expandR_raw, obj.([expandedNeuralRefs{n} 'Clean']));
+                normaliseAndRecentre(expandR_raw, obj.([expandedNeuralRefs{n} 'Clean']), normaliseR);
         end
 
         %% 9. Check for correlation/orthogonalise
@@ -189,14 +195,16 @@ function obj = run_cingulateDMS_config(obj, session, options)
         [expandR_checked, regIdx] = checkAndOrthogonalise( ...
             expandR_standardised, taskLabels, vidLabels, trialLabels, ...
             taskIdx, vidIdx, trialIdx, corrThresh);
-
+        
+        % Store design matrix in obj
+        obj.designMatrix = expandR_checked;
         % Store regLabels and regIdx in obj.crossVal.model_details
         obj.crossVal.model_details = struct();
         obj.crossVal.model_details.full = struct('regLabels', regLabels,...
                                                 'regIdx', regIdx);
 
         %% 10. Ridge regression + cross validation for each neural regressor
-        for n = 1:51 % numel(expandedNeuralRefs) % 2 % 
+        for n = 1:50 %numel(expandedNeuralRefs) % 2 % 
             y = obj.([expandedNeuralRefs{n} 'CleanStandardised']);
 
             % Run ridge MML regression
@@ -253,14 +261,14 @@ function obj = run_cingulateDMS_config(obj, session, options)
 
                 r_subsetModel     = corr(subsetPred(:), y(:));
                 R2_subsetModel    = r_subsetModel^2;
-                DeltaR2_subsetModel = (R2_subsetModel - R2_fullModel) / R2_fullModel;
+                DeltaR2_subsetModel = R2_subsetModel - R2_fullModel;
 
                 % Calculate relative change in R2
                 if abs(R2_fullModel) < 1e-6
                     warning('R² of full model is near zero (%.5f). DeltaR² calculation may be unreliable or produce Inf/NaN.', R2_fullModel);
-                    DeltaR2_subsetModel = NaN;  % assign NaN to avoid misleading values
+                    DeltaR2norm_subsetModel = NaN;  % assign NaN to avoid misleading values
                 else
-                    DeltaR2_subsetModel = (R2_subsetModel - R2_fullModel) / R2_fullModel;
+                    DeltaR2norm_subsetModel = (R2_subsetModel - R2_fullModel) / R2_fullModel;
                 end
 
                 % With all subset results
@@ -269,7 +277,8 @@ function obj = run_cingulateDMS_config(obj, session, options)
                     'Beta',    subsetBeta, ...
                     'r',       r_subsetModel, ...
                     'R2',      R2_subsetModel, ...
-                    'DeltaR2', DeltaR2_subsetModel);
+                    'DeltaR2', DeltaR2_subsetModel, ...
+                    'DeltaR2_norm', DeltaR2norm_subsetModel);
 
                 % Save under the group name
                 obj.crossVal.(expandedNeuralRefs{n}).subset.(sprintf('exclu_%s', groupName)) = subsetResults;
