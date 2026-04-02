@@ -113,7 +113,7 @@ for iSub = 1:length(sessionList)
             options.rewProbColumn = 'rewardProb';
         end
         %% --- Trial timing ---
-        trialDuration  = 6;
+        trialDuration = 6;
         obj.bhv.trialStartTime = obj.bhv.(options.firstTrialEvent);
         obj.bhv.trialEndTime   = obj.bhv.trialStartTime + trialDuration;
 

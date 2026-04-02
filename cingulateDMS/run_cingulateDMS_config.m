@@ -156,7 +156,7 @@ function obj = run_cingulateDMS_config(obj, session, options)
 
         % --- Remove zero-rows ---
         [cleanedMats, zeroOnlyRows, trialVec] = removeRowsOutsideTrialWindows( ...
-            obj, taskMat, taskMat, vidMat, trialMat, neuralInputs{:});
+            obj, taskMat, vidMat, trialMat, neuralInputs{:});
 
         % --- Assign cleaned matrices ---
         [taskMatClean, vidMatClean, trialMatClean] = deal(cleanedMats{1:3});
@@ -202,88 +202,168 @@ function obj = run_cingulateDMS_config(obj, session, options)
         obj.crossVal.model_details = struct();
         obj.crossVal.model_details.full = struct('regLabels', regLabels,...
                                                 'regIdx', regIdx);
-
+        % Store zeroOnlyRows
+        obj.zeroOnlyRows = zeroOnlyRows;
         %% 10. Ridge regression + cross validation for each neural regressor
-        for n = 1:50 %numel(expandedNeuralRefs) % 2 % 
+        for n = 1:numel(expandedNeuralRefs)
             y = obj.([expandedNeuralRefs{n} 'CleanStandardised']);
-
-            % Run ridge MML regression
-            [ridgeLambda, ridgeBeta] = ridgeMML(expandR_checked, y, 30, true, 30);
+            [ridgeLambda, ridgeBeta] = ridgeMML(expandR_checked, y, logspace(-2, 2, 10), true, 30);
             obj.([expandedNeuralRefs{n} '_ridgeLambda']) = ridgeLambda;
             obj.([expandedNeuralRefs{n} '_ridgeBeta'])   = ridgeBeta;
-
             % Run full model 10-fold cross validation
-           numFolds = 5;
+            numFolds = 5;
             [fullPred, fullBeta, ~, fullIdx, fullRidge, fullLabels] = ...
                 crossValModel(expandR_checked, y, regLabels, regIdx, regLabels, numFolds, trialVec);
-
             r_fullModel = corr(fullPred(:), y(:)); % Calculate full model Pearson's R
             R2_fullModel = r_fullModel^2; % Calculate R2 (goodness of fit)
-
             % Save full model data
             obj.crossVal.(expandedNeuralRefs{n}).full = struct( ...
                 'Pred', fullPred, ...
                 'Beta', fullBeta, ...
                 'r', r_fullModel, ...
-                'R2', R2_fullModel ...
-                );
+                'R2', R2_fullModel);
 
-            % Run subset model 10-fold cross validation
+            % --- Run subset model 10-fold cross validation ---
             eventGroups = fieldnames(obj.variableDefs);
             for iG = 1:numel(eventGroups)
                 groupName = eventGroups{iG};
                 groupDef  = obj.variableDefs.(groupName);
-
-                % Skip neural group
+                % Skip neural groups
                 if strcmp(groupDef.type, 'neural')
                     continue
                 end
-
-                % Collect all subset matches for this group
-                subsetMatchIdx = [];
+                % --- Get columns to remove for this group ---
+                subsetRemoveIdx = [];
                 for iVars = 1:numel(groupDef.vars)
-                    thisVar = groupDef.vars{iVars};
-
-                    % Expand wildcard using regex against obj.bhv columns
-                    theseMatches = find(~cellfun(@isempty, regexp(taskLabels, thisVar, 'once')));
-                    subsetMatchIdx = [subsetMatchIdx theseMatches];
+                    thisVarPattern = groupDef.vars{iVars};   % e.g., '^stimulus$'
+                    % Find which regLabels match the regex pattern
+                    labelMatches = find(~cellfun(@isempty, regexp(regLabels, thisVarPattern, 'once')));
+                    if isempty(labelMatches)
+                        warning('Label pattern "%s" not found in regLabels. Skipping.', thisVarPattern);
+                        continue
+                    end
+                    % Find all columns in regIdx that correspond to those matching labels
+                    colsToRemove = find(ismember(regIdx, labelMatches));
+                    % Add to the list
+                    % disp(size(subsetRemoveIdx));
+                    % disp(size(colsToRemove));
+                    subsetRemoveIdx = vertcat(subsetRemoveIdx, colsToRemove);
                 end
-                subsetMatchIdx = unique(subsetMatchIdx); % avoid duplicates
-
-                if isempty(subsetMatchIdx)
-                    warning('Group "%s" did not match any regressors in taskMat. Skipping.', groupName);
+                subsetRemoveIdx = unique(subsetRemoveIdx);
+                if isempty(subsetRemoveIdx)
+                    warning('Group "%s" did not match any columns in X. Skipping.', groupName);
                     continue
                 end
-
-                % Run model on this group
+                % --- Build the leave-one-group-out design matrix ---
+                X_logo = expandR_checked;
+                X_logo(:, subsetRemoveIdx) = [];
+                % --- Update regIdx for the reduced design matrix ---
+                regIdx_logo = regIdx;
+                regIdx_logo(subsetRemoveIdx) = [];
+                % --- Update remaining labels ---
+                remainingLabelIdx = unique(regIdx_logo);
+                regLabels_logo = regLabels(remainingLabelIdx);
+                % --- Run cross-validation ---
                 [subsetPred, subsetBeta, ~, ~, ~, ~] = crossValModel( ...
-                    taskMat, y, taskLabels(subsetMatchIdx), taskIdx, taskLabels, numFolds, trialVec);
-
-                r_subsetModel     = corr(subsetPred(:), y(:));
-                R2_subsetModel    = r_subsetModel^2;
-                DeltaR2_subsetModel = R2_subsetModel - R2_fullModel;
-
-                % Calculate relative change in R2
-                if abs(R2_fullModel) < 1e-6
-                    warning('R² of full model is near zero (%.5f). DeltaR² calculation may be unreliable or produce Inf/NaN.', R2_fullModel);
-                    DeltaR2norm_subsetModel = NaN;  % assign NaN to avoid misleading values
-                else
-                    DeltaR2norm_subsetModel = (R2_subsetModel - R2_fullModel) / R2_fullModel;
-                end
-
-                % With all subset results
+                    X_logo, y, regLabels_logo, regIdx_logo, regLabels, numFolds, trialVec);
+                % --- Compute R² / Delta R² ---
+                r_logo  = corr(subsetPred(:), y(:));
+                R2_logo = r_logo^2;
+                DeltaR2_logo = (R2_logo - R2_fullModel);
+                DeltaR2_logo_norm = DeltaR2_logo/ R2_fullModel;
+                % --- Save results ---
                 subsetResults = struct( ...
                     'Pred',    subsetPred, ...
                     'Beta',    subsetBeta, ...
-                    'r',       r_subsetModel, ...
-                    'R2',      R2_subsetModel, ...
-                    'DeltaR2', DeltaR2_subsetModel, ...
-                    'DeltaR2_norm', DeltaR2norm_subsetModel);
-
-                % Save under the group name
+                    'r',       r_logo, ...
+                    'R2',      R2_logo, ...
+                    'DeltaR2', DeltaR2_logo, ...
+                    'DeltaR2_norm', DeltaR2_logo_norm);
                 obj.crossVal.(expandedNeuralRefs{n}).subset.(sprintf('exclu_%s', groupName)) = subsetResults;
             end
         end
+        
+        % %% 10. Ridge regression + cross validation for each neural regressor
+        % for n = 1:numel(expandedNeuralRefs) % 51 % 2 % 
+        %     y = obj.([expandedNeuralRefs{n} 'CleanStandardised']);
+        % 
+        %     % Run ridge MML regression
+        %     [ridgeLambda, ridgeBeta, convergenceFailures] = ridgeMML(expandR_checked, y, logspace(-2,2,10), true, 30); %% ridgeMML(X, Y, lambda, verbose, timeoutSec)
+        %     obj.([expandedNeuralRefs{n} '_ridgeLambda']) = ridgeLambda;
+        %     obj.([expandedNeuralRefs{n} '_ridgeBeta'])   = ridgeBeta;
+        % 
+        %     % Run full model 10-fold cross validation
+        %    numFolds = 5;
+        %     [fullPred, fullBeta, ~, fullIdx, fullRidge, fullLabels] = ...
+        %         crossValModel(expandR_checked, y, regLabels, regIdx, regLabels, numFolds, trialVec);
+        % 
+        %     r_fullModel = corr(fullPred(:), y(:)); % Calculate full model Pearson's R
+        %     R2_fullModel = r_fullModel^2; % Calculate R2 (goodness of fit)
+        % 
+        %     % Save full model data
+        %     obj.crossVal.(expandedNeuralRefs{n}).full = struct( ...
+        %         'Pred', fullPred, ...
+        %         'Beta', fullBeta, ...
+        %         'r', r_fullModel, ...
+        %         'R2', R2_fullModel ...
+        %         );
+        % 
+        %     % Run subset model 10-fold cross validation
+        %     eventGroups = fieldnames(obj.variableDefs);
+        %     for iG = 1:numel(eventGroups)
+        %         groupName = eventGroups{iG};
+        %         groupDef  = obj.variableDefs.(groupName);
+        % 
+        %         % Skip neural group
+        %         if strcmp(groupDef.type, 'neural')
+        %             continue
+        %         end
+        % 
+        %         % Collect all subset matches for this group
+        %         subsetMatchIdx = [];
+        %         for iVars = 1:numel(groupDef.vars)
+        %             thisVar = groupDef.vars{iVars};
+        % 
+        %             % Expand wildcard using regex against obj.bhv columns
+        %             theseMatches = find(~cellfun(@isempty, regexp(taskLabels, thisVar, 'once')));
+        %             subsetMatchIdx = [subsetMatchIdx theseMatches];
+        %         end
+        %         subsetMatchIdx = unique(subsetMatchIdx); % avoid duplicates
+        % 
+        %         if isempty(subsetMatchIdx)
+        %             warning('Group "%s" did not match any regressors in taskMat. Skipping.', groupName);
+        %             continue
+        %         end
+        % 
+        %         % Run model on this group
+        %         [subsetPred, subsetBeta, ~, ~, ~, ~] = crossValModel( ...
+        %             expandR_checked, y, taskLabels(subsetMatchIdx), taskIdx, taskLabels, numFolds, trialVec);
+        % 
+        %         r_subsetModel     = corr(subsetPred(:), y(:));
+        %         R2_subsetModel    = r_subsetModel^2;
+        %         DeltaR2_subsetModel = R2_subsetModel - R2_fullModel;
+        % 
+        %         % Calculate relative change in R2
+        %         if abs(R2_fullModel) < 1e-6
+        %             warning('R² of full model is near zero (%.5f). DeltaR² calculation may be unreliable or produce Inf/NaN.', R2_fullModel);
+        %             DeltaR2norm_subsetModel = NaN;  % assign NaN to avoid misleading values
+        %         else
+        %             DeltaR2norm_subsetModel = (R2_subsetModel - R2_fullModel) / R2_fullModel;
+        %         end
+        % 
+        %         % With all subset results
+        %         subsetResults = struct( ...
+        %             'Pred',    subsetPred, ...
+        %             'Beta',    subsetBeta, ...
+        %             'r',       r_subsetModel, ...
+        %             'R2',      R2_subsetModel, ...
+        %             'DeltaR2', DeltaR2_subsetModel, ...
+        %             'DeltaR2_norm', DeltaR2norm_subsetModel);
+        % 
+        %         % Save under the group name
+        %         obj.crossVal.(expandedNeuralRefs{n}).subset.(sprintf('only_%s', groupName)) = subsetResults;
+        %     end
+        % end
 
     catch ME
         fprintf('---\nProcessing failed for session: %s\n', session);

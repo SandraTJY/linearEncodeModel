@@ -1,6 +1,6 @@
 %% For exporting only the parts of obj that are needed in Python
-output_dir = "\\qnap-al001.dpag.ox.ac.uk\STan\Data\linearEncodeModel_output\2025-07-23_1_SAT037\model_10-15_stimreward";
-mkdir(output_dir)
+output_dir = "\\qnap-al001.dpag.ox.ac.uk\STan\Data\linearEncodeModel_output\2025-07-23_1_SAT037\model_10-23_stimOnlickMultiple";
+mkdir(output_dir);
 all_variables = fieldnames(obj);
 variables_keep = [];
 for v = 1:numel(all_variables)
@@ -20,6 +20,7 @@ obj_export = struct();
 for v = 1:numel(variables_keep)
     obj_export.(variables_keep{v}) = obj.(variables_keep{v});
 end
+obj_export.options = options;
 
 %% Also export crossVal as its own file
 crossVal_export = obj.crossVal;

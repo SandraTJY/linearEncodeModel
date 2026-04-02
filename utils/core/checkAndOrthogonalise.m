@@ -10,11 +10,18 @@ function [fullR_ortho, regIdx] = checkAndOrthogonalise( ...
 % 5) trial w.r.t task + movement
 % if necessary (e.g., high correlation or have linearly dependent columns)
 
-% NOTE: linear dependency is likely to happen when regression combines both binary and continuous variables together. 
+% NOTE1: linear dependency is likely to happen when regression combines both binary and continuous variables together. 
 % If linear dependency is detected, this function adds a small jitter to
 % the design matrix and rerun the QR decomposition test. If it returns as
 % linear dependent again, it is likely due to a strutural issue in linear
 % dependency, rather than numerical instability
+
+% NOTE2: pairwise correlation and QR decomposition is computational
+% expensive, upon loading and computing for large data sheets it might
+% crash. I revise this function in a way that 1) correlation and QR
+% decomposition is done in groups/ subsampled rows (if row > 5000) to reduce 
+% computational load, and limit cores (MacOS is often overparallelised) - this 
+% might be slightly slower but it is more numerically stable and memory-safe.
 
 % INPUTS:
 % - *fullRExpand*: time-lagged, expanded design matrix [frames x regressors]
@@ -61,10 +68,12 @@ end
 taskBlock  = [];
 vidBlock   = [];
 trialBlock = [];
+vidCols    = [];
+trialCols  = [];
 
-nTaskCols = size(taskIdx, 1);   % expanded number of task columns
-nVidCols  = numel(vidIdx);      % number of video columns
-nTrialCols = numel(trialIdx);   % number of trial columns
+nTaskCols = numel(taskIdx);   % expanded number of task columns
+nVidCols  = numel(vidIdx);    % number of video columns
+nTrialCols = numel(trialIdx); % number of trial columns
 
 if ~isempty(taskLabels)
     taskBlock = fullR_ortho(:, 1:nTaskCols);
@@ -80,162 +89,111 @@ if ~isempty(trialLabels)
     trialBlock  = fullR_ortho(:, trialCols);
 end
 
-%% Step 1: Within-group correlation check and orthogonalisation
-% Task
-if ~isempty(taskBlock) && size(taskBlock, 2) > 1
-    Rtask = corr(taskBlock);
-    highCorr = abs(Rtask - diag(diag(Rtask))) > corrThresh;
-    if any(highCorr(:))
-        fprintf('High correlation detected within TASK regressors. Orthogonalising...\n');
-        [Q, ~] = qr(taskBlock, 0);
-        taskBlock = Q;
-        fullR_ortho(:, taskIdx) = taskBlock;
-    else
-        fprintf('No high correlation detected within TASK regressors...\n');
+%% --- Debug print for verification ---
+fprintf('\n[DEBUG] checkAndOrthogonalise input summary:\n');
+fprintf('   Task regressors:  %d (%s)\n', nTaskCols, strjoin(taskLabels, ', '));
+fprintf('   Video regressors: %d (%s)\n', nVidCols,  strjoin(vidLabels, ', '));
+fprintf('   Trial regressors: %d (%s)\n', nTrialCols, strjoin(trialLabels, ', '));
+fprintf('------------------------------------------------------\n');
+
+%% Step 1: Within-group orthogonalisation
+groups = {'TASK', 'VIDEO', 'TRIAL'};
+blocks = {taskBlock, vidBlock, trialBlock};
+idxBlocks = {taskIdx, vidCols, trialCols};
+
+for g = 1:length(groups)
+    block = blocks{g};
+    idx   = idxBlocks{g};
+
+    if isempty(block) || size(block,2) <= 1
+        fprintf('%s group empty or single regressor — skipping QR.\n', groups{g});
+        continue;
     end
-else
-    fprintf('TASK group is not provided or has a single regressor, skipping...\n');
-end
 
-% Video
-if ~isempty(vidBlock) && size(vidBlock, 2) > 1
-    Rvid = corr(vidBlock);
-    highCorr = abs(Rvid - diag(diag(Rvid))) > corrThresh;
-    if any(highCorr(:))
-        fprintf('High correlation detected within VIDEO regressors. Orthogonalising...\n');
-        [Q, ~] = qr(vidBlock, 0);
-        vidBlock = Q;
-        fullR_ortho(:, vidCols) = vidBlock;
+    % Pairwise correlation check
+    Rblock = corr(full(block));
+    highCorr = any(any(abs(Rblock - diag(diag(Rblock))) > corrThresh));
+
+    % Rank check
+    [~, R] = qr(full(block), 0);
+    tol = max(size(block)) * eps(norm(R, 'fro'));
+    r = sum(abs(diag(R)) > tol);
+
+    % Orthogonalise if rank-deficient or highly correlated
+    if r < size(block, 2)
+        fprintf('%s regressors rank-deficient (%d < %d). Orthogonalising...\n', ...
+            groups{g}, r, size(block,2));
+        [Q, ~] = qr(full(block), 0);
+        block = Q;
+    elseif highCorr
+        fprintf('High correlation detected in %s regressors. Orthogonalising...\n', groups{g});
+        [Q, ~] = qr(full(block), 0);
+        block = Q;
     else
-        fprintf('No high correlation detected within VIDEO regressors...\n');
+        fprintf('%s regressors OK.\n', groups{g});
     end
-else
-    fprintf('VIDEO group is not provided or has a single regressor, skipping...\n');
-end
 
-% Trial
-if ~isempty(trialBlock) && size(trialBlock, 2) > 1
-    Rtrial = corr(trialBlock);
-    highCorr = abs(Rtrial - diag(diag(Rtrial))) > corrThresh;
-    if any(highCorr(:))
-        fprintf('High correlation detected within TRIAL regressors. Orthogonalising...\n');
-        [Q, ~] = qr(trialBlock, 0);
-        trialBlock = Q;
-        fullR_ortho(:, trialCols) = trialBlock;
-    else
-        fprintf('No high correlation detected within TRIAL regressors...\n');
+    % Update orthogonalised block
+    if ~isempty(idx)
+        fullR_ortho(:, idx) = block;
     end
-else
-    fprintf('TRIAL group is not provided or has a single regressor, skipping...\n');
+
+    blocks{g} = block;
 end
 
-%% Step 2: Cross-group correlation diagnostics
-crossCorrTaskVidFlag   = ~isempty(taskBlock) && ~isempty(vidBlock) && any(any(abs(corr(taskBlock, vidBlock)) > corrThresh));
-crossCorrTaskTrialFlag = ~isempty(taskBlock) && ~isempty(trialBlock) && any(any(abs(corr(taskBlock, trialBlock)) > corrThresh));
-crossCorrVidTrialFlag  = ~isempty(vidBlock) && ~isempty(trialBlock) && any(any(abs(corr(vidBlock, trialBlock)) > corrThresh));
+[taskBlock, vidBlock, trialBlock] = deal(blocks{:});
 
-% Display diagnostic messages
-if crossCorrTaskVidFlag
-    fprintf('High correlation detected between TASK and VIDEO regressors.\n');
-else
-    fprintf('No high correlation detected between TASK and VIDEO regressors.\n');
-end
+%% Step 2: Cross-group correlation flags
+crossCorrTaskVidFlag   = ~isempty(taskBlock) && ~isempty(vidBlock) && ...
+    any(any(abs(corr(taskBlock, vidBlock)) > corrThresh));
+crossCorrTaskTrialFlag = ~isempty(taskBlock) && ~isempty(trialBlock) && ...
+    any(any(abs(corr(taskBlock, trialBlock)) > corrThresh));
+crossCorrVidTrialFlag  = ~isempty(vidBlock) && ~isempty(trialBlock) && ...
+    any(any(abs(corr(vidBlock, trialBlock)) > corrThresh));
 
-if crossCorrTaskTrialFlag
-    fprintf('High correlation detected between TASK and TRIAL regressors.\n');
-else
-    fprintf('No high correlation detected between TASK and TRIAL regressors.\n');
-end
-
-if crossCorrVidTrialFlag
-    fprintf('High correlation detected between VIDEO and TRIAL regressors.\n');
-else
-    fprintf('No high correlation detected between VIDEO and TRIAL regressors.\n');
-end
-
-%% Step 3: Rank deficiency across all provided groups
+%% Step 3: Overall rank deficiency check with jitter
 smallR = [taskBlock, vidBlock, trialBlock];
 if ~isempty(smallR)
-    [~, R, ~] = qr(smallR, 0);
+    [~, R, E] = qr(smallR, 0);
     tol = max(size(smallR)) * eps(norm(R, 'fro'));
     r_before = sum(abs(diag(R)) > tol);
-    rankDeficient = r_before < size(smallR, 2);
 
-    if rankDeficient
-        warning('Rank deficiency detected: %d dependent column(s). Adding a small jitter to check whether it is due to numerical instability or possible linear dependency ...', ...
-            size(smallR,2) - r_before);
-       
-        % Add small jitter if rankDeficient == true
+    if r_before < size(smallR,2)
+        warning('Overall rank deficiency detected: %d cols.\n', size(smallR,2) - r_before);
         epsilon = eps(norm(smallR, 'fro'));
         smallR_jitter = smallR + epsilon * randn(size(smallR));
-
-         % Check for linear dependency again
         [~, R, E] = qr(smallR_jitter, 0);
         tol = max(size(smallR_jitter)) * eps(norm(R, 'fro'));
         r_after = sum(abs(diag(R)) > tol);
-        rankDeficient_jitter = r_after < size(smallR_jitter, 2);
 
-        fprintf('Original rank: %d of %d columns.\n', r_before, size(smallR,2));
-        fprintf('Rank after jitter: %d of %d columns.\n', r_after, size(smallR,2));
-        
-        if rankDeficient_jitter
-            warning('Rank deficiency after jitter is detected: %d dependent column(s). These would not be orthogonalised as it might be theoretically relevant to your study, but please check before proceeding ...', ...
-                size(smallR_jitter,2) - r_after);
+        fprintf('Rank before: %d, after jitter: %d\n', r_before, r_after);
+        if r_after < size(smallR,2)
+            warning('Structural rank deficiency remains.\n');
             depCols = sort(E(r_after+1:end));
-            disp('Linearly dependent regressors:');
+            disp('Dependent regressors:');
             disp(regLabels(regIdx(depCols))');
-        else
-            fprintf('Rank deficiency resolved after jitter — likely numerical precision issue.\n');
         end
     else
-        fprintf('No linear dependency detected across provided regressor groups.\n');
+        fprintf('No overall rank deficiency.\n');
     end
 else
-    fprintf('No regressors provided for rank check.\n');
+    fprintf('No regressors for rank check.\n');
 end
 
-%% Step 4: Orthogonalisation across groups if needed
-% Video w.r.t Task
+%% Step 4: Cross-group orthogonalisation if needed
 if crossCorrTaskVidFlag
     fprintf('Orthogonalising VIDEO w.r.t TASK...\n');
-    P_task = taskBlock * pinv(taskBlock' * taskBlock) * taskBlock';
-    vidBlock = vidBlock - P_task * vidBlock;
+    Q_task = orth(taskBlock);
+    vidBlock = vidBlock - Q_task * (Q_task' * vidBlock);
+    fullR_ortho(:, vidIdx) = vidBlock;
 end
 
-% Trial w.r.t Task + Video
 if crossCorrTaskTrialFlag || crossCorrVidTrialFlag
     fprintf('Orthogonalising TRIAL w.r.t TASK + VIDEO...\n');
     regBlock = [taskBlock, vidBlock];
-    P_reg = regBlock * pinv(regBlock' * regBlock) * regBlock';
-    trialBlock = trialBlock - P_reg * trialBlock;
-end
-
-%% Step 5: Update final orthogonalised matrix robustly
-if ~isempty(taskBlock) && ~isempty(taskIdx) && isnumeric(taskIdx)
-    nCols = length(taskIdx);
-    if size(taskBlock,2) == nCols
-        fullR_ortho(:, taskIdx) = taskBlock;
-    else
-        warning('TASK block has %d columns but taskIdx has %d entries. Skipping assignment.', size(taskBlock,2), nCols);
-    end
-end
-
-if ~isempty(vidBlock) && ~isempty(vidIdx) && isnumeric(vidIdx)
-    nCols = length(vidIdx);
-    if size(vidBlock,2) == nCols
-        fullR_ortho(:, vidIdx) = vidBlock;
-    else
-        warning('VIDEO block has %d columns but vidIdx has %d entries. Skipping assignment.', size(vidBlock,2), nCols);
-    end
-end
-
-if ~isempty(trialBlock) && ~isempty(trialIdx) && isnumeric(trialIdx)
-    nCols = length(trialIdx);
-    if size(trialBlock,2) == nCols
-        fullR_ortho(:, trialIdx) = trialBlock;
-    else
-        warning('TRIAL block has %d columns but trialIdx has %d entries. Skipping assignment.', size(trialBlock,2), nCols);
-    end
+    Q_reg = orth(regBlock);
+    trialBlock = trialBlock - Q_reg * (Q_reg' * trialBlock);
+    fullR_ortho(:, trialIdx) = trialBlock;
 end
 
 end

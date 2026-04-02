@@ -1,78 +1,120 @@
 function [lambda, betas, convergenceFailures] = ridgeMML(X, Y, lambda, verbose, timeoutSec)
-    % *ridgeMML*: a function that runs the ridge Regression with
-    % marginal maximum likelihood (MML) - approach described in Karabatsos (2017).
-    
-    % INPUT:
-    % - *obj*: (can be kept empty) the *object instance* of the class linearEncodeModel
-    % that was previously created, in MATLAB this is just a syntax
-    % to call the function as it belongs to the method of the class
-    % linearEncodeModel()
-    % - *X*: (matrix; in double) the time-lagged design matrix with
-    % the dimension [frames x (number of lags x number of regressors)]
-    % - *Y*: (vector; in double): the outcome of the design matrix,
-    % with the dimension of [frames x 1], which the 1st dimension
-    % must match with *X*
-    % - *L*: (optional) initial lambdas (optional)
-    % - *verbose*: (optional) print progress every 10 regressions (default: true)
-    % - *timeoutSec*: (optional) timeout in seconds per column (optional)
-    
-    % OUTPUT:
-    % - *lambda*: (double) a value that shows the optimal ridge regularisation parameter
-    % λ (lambda) for a single output variable using the marginal maximum likelihood (MML)
-    % - *betas*: (vector, double) [frames x 1] the beta values
-    % associated with each frame
-    % - *convergenceFailures*: (vector, logical) whether the fminbnd failed to converge
-    % for each column of y (this happens frequently).
+% ridgeMML: Ridge Regression using Marginal Maximum Likelihood (MML)
+% Supports flexible lambda input: empty, scalar, or vector/grid.
+%
+% INPUT:
+%   X: [n x p] design matrix
+%   Y: [n x pY] outcome matrix
+%   lambda: optional
+%       []       -> automatic MML search
+%       scalar   -> fixed lambda for all outputs
+%       vector   -> treated as a grid of starting points for MML
+%   verbose: (optional) logical, default = true
+%   timeoutSec: (optional) numeric, default = 30 seconds per output
+%
+% OUTPUT:
+%   lambda: [1 x pY] optimal ridge parameters
+%   betas: [p+1 x pY] ridge coefficients (includes intercept)
+%   convergenceFailures: [1 x pY] logical flags (true = failed)
 
-if size(Y, 1) ~= size(X, 1)
-    error('X and Y must have the same number of rows');
-end
+    % ----------------------------
+    % Defaults and checks
+    % ----------------------------
+    if nargin < 5 || isempty(timeoutSec), timeoutSec = 30; end
+    if nargin < 4 || isempty(verbose), verbose = true; end
 
-computeL = isempty(lambda) || isnan(lambda(1));
+    if size(X,1) ~= size(Y,1)
+        error('X and Y must have the same number of rows.');
+    end
 
-pY = size(Y, 2);
+    [n, pX] = size(X);
+    pY = size(Y,2);
 
-% Compute optimal lambda if needed
-if computeL
-    [U, S, V] = svd(X, 0);
-    d = diag(S);
-    n = size(X, 1);
-    p = size(V, 2);
-    q = sum(d' > eps(U(1)) * (1:p));
-    d2 = d .^ 2;
-    alph = S * U' * Y;
-    alpha2 = alph .^ 2;
-    YVar = sum(Y .^ 2, 1);
-    lambda = NaN(1, pY);
     convergenceFailures = false(1, pY);
 
-    for i = 1:pY
-        tStart = tic;
-        [lambda(i), flag] = ridgeMMLOneY(q, d2, n, YVar(i), alpha2(:, i), timeoutSec);
-        convergenceFailures(i) = (flag < 1);
+    % ----------------------------
+    % Handle lambda input
+    % ----------------------------
+    if isempty(lambda)
+        computeLambda = true;
+        lambdaGrid = [];
+    elseif isscalar(lambda)
+        computeLambda = false;
+        lambda = repmat(lambda, 1, pY);
+    elseif isnumeric(lambda) && numel(lambda) > 1
+        computeLambda = true;
+        lambdaGrid = lambda(:)';
+    else
+        error('Invalid lambda input: must be empty, scalar, or numeric vector.');
+    end
 
-        if verbose && mod(i, 10) == 0
-            fprintf('[%s] Processed %d/%d responses (%.2f sec)\n', ...
-                datestr(now,'HH:MM:SS'), i, pY, toc(tStart));
+    % ----------------------------
+    % Compute SVD quantities
+    % ----------------------------
+    if issparse(X)
+        [U, S, V] = svds(X, min(size(X)));
+    else
+        [U, S, V] = svd(X, 0);
+    end
+
+    d = diag(S);
+    d2 = d.^2;
+    q = numel(d);
+    alph = S * U' * Y;
+    alpha2 = alph.^2;
+    YVar = sum(Y.^2, 1);
+
+    lambdaPrior = 1;
+    lambdaPriorWeight = 0;
+    lambdaMin = 1e-6;
+    lambdaOut = NaN(1, pY);
+
+    % ----------------------------
+    % MML loop per output
+    % ----------------------------
+    for i = 1:pY
+        if computeLambda
+            % choose start lambda
+            if exist('lambdaGrid','var') && ~isempty(lambdaGrid)
+                startLambda = median(lambdaGrid);
+            else
+                startLambda = 1;
+            end
+
+            % estimate lambda using MML (ridgeMMLOneY handles optimization)
+            [lambda_i, flag] = ridgeMMLOneY(q, d2, n, YVar(i), alpha2(:,i), timeoutSec, startLambda);
+
+            % apply weak prior and floor
+            if lambdaPriorWeight > 0
+                lambda_i = (lambda_i + lambdaPriorWeight * lambdaPrior) / (1 + lambdaPriorWeight);
+            end
+            lambda_i = max(lambda_i, lambdaMin);
+            lambdaOut(i) = lambda_i;
+            convergenceFailures(i) = (flag < 1);
+
+        else
+            lambdaOut(i) = lambda(i);
+        end
+
+        if verbose && mod(i,10)==0
+            fprintf('[%s] MML selected lambda for %d/%d\n', datestr(now,'HH:MM:SS'), i, pY);
         end
     end
-else
-    p = size(X, 2);
-end
 
-% Ridge regression solution
-X = [ones(size(X, 1), 1), X];  % add intercept
-p = size(X, 2);
-XTX = X' * X;
-ep = eye(p); ep(1, 1) = 0;    % no regularization on intercept
-XTY = X' * Y;
+    lambda = lambdaOut;
 
-betas = NaN(p, pY);
-for i = 1:pY
-    betas(:, i) = (XTX + lambda(i) * ep) \ XTY(:, i);
-end
+    % ----------------------------
+    % Compute final ridge regression betas
+    % ----------------------------
+    Xfull = [ones(n,1), X];
+    p = size(Xfull,2);
+    ep = eye(p); ep(1,1) = 0;  % do not penalize intercept
+    XTX = Xfull' * Xfull;
+    XTY = Xfull' * Y;
 
-% No renormalisation since X is already standardized
-betas(isnan(betas)) = 0;
-
+    betas = NaN(p, pY);
+    for i = 1:pY
+        betas(:,i) = (XTX + lambda(i)*ep) \ XTY(:,i);
+    end
+    betas(isnan(betas)) = 0;
 end
