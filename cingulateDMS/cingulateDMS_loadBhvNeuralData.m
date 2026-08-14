@@ -4,8 +4,8 @@
 % object obj, for running the configuration.
 
 %% --- Define subjects and sessions ---
-% sessionList = {'2024-09-16_2_JM007'};
-sessionList = options.expRef;
+sessionList = {'2025-07-23_1_SAT037'};
+% sessionList = options.expRef;
 
 %% --- Loop through sessions ---
 if ~exist('allObjs', 'var') || isempty(allObjs)
@@ -51,13 +51,37 @@ for iSub = 1:length(sessionList)
             missingInThisSession{end+1} = timestampFile;
         end
 
-        %% --- Licktrace file ---
+        %% --- Licktrace file --- (continuous trace)
         lickTraceFile = dir(fullfile(options.bhvDataRoot, animalID, session, (options.lickTraceFileExtension)));
         if ~isempty(lickTraceFile)
             lickTraceFile = fullfile(lickTraceFile(1).folder, lickTraceFile(1).name);
             if isfile(lickTraceFile)
                 lickTraceTable = readtable(lickTraceFile, 'Delimiter', ',', 'ReadVariableNames', true);
-                obj.lickTrace = lickTraceTable;
+                obj.lickTrace = lickTraceTable; % Code performs its own time alignment
+            end
+        end
+
+        %% --- LickEvents file --- (binary event log)
+        lickEventsFile = dir(fullfile(options.bhvDataRoot, animalID, session, (options.lickTimesFileExtension)));
+        if ~isempty(lickEventsFile)
+            lickEventsFile = fullfile(lickEventsFile(1).folder, lickEventsFile(1).name);
+            if isfile(lickEventsFile)
+                lick_times = readNPY(lickEventsFile);
+                lickEventsTable = table; % initialise the table
+                lickEventsTable.time = lick_times; % fill a column 'time' with every lick time
+                lickEventsTable{:, 'lick'} = 1; % have a column 'lick' full of 1s, denoting each time has a lick event
+                obj.lickEvents = lickEventsTable; % Store lick times and events in the object
+            end
+        end
+
+        %% --- Keypoints table --- (continuous)
+        keypointsFile = dir(fullfile(options.faceDataRoot, animalID, session, (options.keypointsFileExtension)));
+        if ismember('keypoints', fieldnames(options.variableDefs)) & ~isempty(keypointsFile)
+            keypointsFile = fullfile(keypointsFile(1).folder, keypointsFile(1).name);
+            if isfile(keypointsFile)
+                keypointsTable = readtable(keypointsFile, 'Delimiter', ',', 'ReadVariableNames', true);
+                % keypoint_vars = options.variableDefs.keypoints.vars;    
+                obj.vid = keypointsTable;
             end
         end
 
